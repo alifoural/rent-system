@@ -1,0 +1,29 @@
+# Environment variables
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.env
+
+# Database
+data/*.db
+data/*.sqlite
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Gemini/IDE
+.gemini/
+.vscode/
+.idea/
+
+# Backend static
+app/static/node_modules/
