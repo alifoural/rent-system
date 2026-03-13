@@ -123,7 +123,12 @@ const translations = {
     theme_light: 'Light Mode',
     theme_dark: 'Night Mode',
     theme_toggle: 'Night Mode',
-    currency: 'QAR'
+    currency: 'QAR',
+    tab_available: 'Available for Rent',
+    filter_by_type: 'All Types',
+    available_for_rent: 'Available for Rent',
+    all_types: 'All Types',
+    no_available_assets: 'No assets currently available for rent.'
   },
   ar: {
     app_name: 'رنت فلو',
@@ -209,7 +214,12 @@ const translations = {
     theme_light: 'الوضع النهاري',
     theme_dark: 'الوضع الليلي',
     theme_toggle: 'الوضع الليلي',
-    currency: 'ر.ق'
+    currency: 'ر.ق',
+    tab_available: 'المتاح للإيجار',
+    filter_by_type: 'كل الأنواع',
+    available_for_rent: 'المتاح للإيجار',
+    all_types: 'كل الأنواع',
+    no_available_assets: 'لا توجد أصول متاحة للإيجار حالياً.'
   }
 };
 
@@ -367,6 +377,7 @@ async function renderReports(el, actions) {
       <button class="tab-btn ${currentReportTab === 'annual' ? 'active' : ''}" onclick="switchReportTab('annual')">${t('tab_annual')}</button>
       <button class="tab-btn ${currentReportTab === 'financial' ? 'active' : ''}" onclick="switchReportTab('financial')">${t('tab_financial')}</button>
       <button class="tab-btn ${currentReportTab === 'expenses' ? 'active' : ''}" onclick="switchReportTab('expenses')">${t('tab_expenses')}</button>
+      <button class="tab-btn ${currentReportTab === 'available' ? 'active' : ''}" onclick="switchReportTab('available')">${t('tab_available')}</button>
     </div>
     <div id="reportFilters" class="report-filter-bar"></div>
     <div id="reportTabContent"></div>
@@ -376,12 +387,16 @@ async function renderReports(el, actions) {
   else if (currentReportTab === 'monthly') await renderMonthlyTab(filterContainer);
   else if (currentReportTab === 'annual') await renderAnnualTab(filterContainer);
   else if (currentReportTab === 'financial') await renderFinancialTab(filterContainer);
+  else if (currentReportTab === 'available') await renderAvailableTab(filterContainer);
   else await renderExpensesTab(filterContainer);
 
-  actions.innerHTML = `
-    <button class="btn btn-secondary" style="margin-right:8px" onclick="exportToExcel()"><span class="icon">📊</span> ${t('export_excel')}</button>
-    <button class="btn btn-secondary" onclick="exportToPDF()"><span class="icon">🖨️</span> ${t('export_pdf')}</button>
-  `;
+  // Hide export buttons on available tab (not needed)
+  if (currentReportTab !== 'available') {
+    actions.innerHTML = `
+      <button class="btn btn-secondary" style="margin-right:8px" onclick="exportToExcel()"><span class="icon">📊</span> ${t('export_excel')}</button>
+      <button class="btn btn-secondary" onclick="exportToPDF()"><span class="icon">🖨️</span> ${t('export_pdf')}</button>
+    `;
+  }
 }
 
 window.switchReportTab = function (tab) {
@@ -392,11 +407,21 @@ window.switchReportTab = function (tab) {
 // ── Monthly Status Report (matches Excel format) ─────────────────────────────
 let monthlyStatusData = [];
 
+let _monthlyStatusTypes = [];
+
 async function renderMonthlyStatusTab(container) {
   const today = new Date();
   const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  // Load types for the filter dropdown
+  if (!_monthlyStatusTypes.length) {
+    try { _monthlyStatusTypes = await api('/api/asset-types'); } catch(e) { _monthlyStatusTypes = []; }
+  }
   container.innerHTML = `
     <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center; width:100%; margin-bottom:24px;">
+      <select id="statusTypeFilter" class="form-control" style="min-width:140px; height:42px; padding:0 10px;" onchange="applyMonthlyStatusTypeFilter()">
+        <option value="">${t('all_types')}</option>
+        ${_monthlyStatusTypes.map(tp => `<option value="${tp.name}">${tp.name}</option>`).join('')}
+      </select>
       <select id="statusMonth" class="form-control" style="width:140px; height:42px; padding:0 10px;">
         ${monthNames.map((m, i) => `<option value="${i + 1}" ${i + 1 === today.getMonth() + 1 ? 'selected' : ''}>${m}</option>`).join('')}
       </select>
@@ -408,6 +433,12 @@ async function renderMonthlyStatusTab(container) {
   setTimeout(loadMonthlyStatusReport, 50);
 }
 
+window.applyMonthlyStatusTypeFilter = function() {
+  const month = document.getElementById('statusMonth')?.value;
+  const year = document.getElementById('statusYear')?.value;
+  renderMonthlyStatusTable(month, year);
+}
+
 window.loadMonthlyStatusReport = async function () {
   const container = document.getElementById('monthlyStatusContainer');
   const month = document.getElementById('statusMonth').value;
@@ -416,6 +447,9 @@ window.loadMonthlyStatusReport = async function () {
   container.innerHTML = `<div class="empty-state"><p>${t('loading')}</p></div>`;
   try {
     monthlyStatusData = await api(`/api/reports/monthly?year=${year}&month=${month}`);
+    // Reset type filter to 'all' on fresh load
+    const typeFilter = document.getElementById('statusTypeFilter');
+    if (typeFilter) typeFilter.value = '';
     renderMonthlyStatusTable(month, year);
   } catch (err) { toast(err.message, 'error'); }
 }
@@ -431,14 +465,18 @@ window.renderMonthlyStatusTable = function (month, year) {
   const statusColor = s => s === 'Paid' ? '#22c55e' : s === 'Partially Paid' ? '#f59e0b' : s === 'Vacant' ? '#64748b' : '#ef4444';
   const statusText = s => t(s === 'Paid' ? 'paid_status' : s === 'Partially Paid' ? 'partial_status' : s === 'Vacant' ? 'vacant_status' : 'unpaid_status');
 
-  const totalExpected = monthlyStatusData.reduce((s, r) => s + Number(r.expected_rent), 0);
-  const totalPaid = monthlyStatusData.reduce((s, r) => s + Number(r.amount_paid), 0);
-  const totalBalance = monthlyStatusData.reduce((s, r) => s + Number(r.balance), 0);
-  const paidCount = monthlyStatusData.filter(r => r.status === 'Paid').length;
-  const partialCount = monthlyStatusData.filter(r => r.status === 'Partially Paid').length;
-  const unpaidCount = monthlyStatusData.filter(r => r.status === 'Unpaid').length;
+  // Apply type filter
+  const selectedType = document.getElementById('statusTypeFilter')?.value || '';
+  const displayData = selectedType ? monthlyStatusData.filter(r => r.asset_type_name === selectedType) : monthlyStatusData;
 
-  const rows = monthlyStatusData.map((item, i) => `
+  const totalExpected = displayData.reduce((s, r) => s + Number(r.expected_rent), 0);
+  const totalPaid = displayData.reduce((s, r) => s + Number(r.amount_paid), 0);
+  const totalBalance = displayData.reduce((s, r) => s + Number(r.balance), 0);
+  const paidCount = displayData.filter(r => r.status === 'Paid').length;
+  const partialCount = displayData.filter(r => r.status === 'Partially Paid').length;
+  const unpaidCount = displayData.filter(r => r.status === 'Unpaid').length;
+
+  const rows = displayData.map((item, i) => `
     <tr>
       <td style="color:var(--text-muted);text-align:center;font-size:12px">${i + 1}</td>
       <td>${item.asset_type_name || '—'}</td>
@@ -986,6 +1024,98 @@ window.exportToPDF = function () {
   window.print();
 }
 
+// ── Available for Rent Report ─────────────────────────────────────────────────
+async function renderAvailableTab(container) {
+  container.innerHTML = ''; // No filter bar needed
+  const content = document.getElementById('reportTabContent');
+  content.innerHTML = `<div class="empty-state"><p>${t('loading')}</p></div>`;
+  try {
+    const data = await api('/api/reports/available');
+    const isAr = currentLang === 'ar';
+
+    if (!data.length) {
+      content.innerHTML = `<div class="empty-state"><div class="empty-icon">🏠</div><p>${t('no_available_assets')}</p></div>`;
+      return;
+    }
+
+    // Group by type
+    const grouped = {};
+    data.forEach(item => {
+      if (!grouped[item.type_name]) grouped[item.type_name] = [];
+      grouped[item.type_name].push(item);
+    });
+
+    let html = `
+      <div id="printableReport">
+        <div class="report-print-header">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;">
+            <div>
+              <div style="font-size:22px;font-weight:800;letter-spacing:-0.5px">🏢 RentFlow</div>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:2px">${isAr ? 'نظام إدارة الأصول والإيجارات' : 'Asset Management & Rental System'}</div>
+            </div>
+            <div style="text-align:${isAr ? 'left' : 'right'}">
+              <div style="font-size:16px;font-weight:700">${t('available_for_rent')}</div>
+              <div style="font-size:13px;color:var(--accent);font-weight:600;margin-top:2px">${isAr ? 'الأصول المتاحة للإيجار الآن' : 'Currently Available Units'}</div>
+              <div style="font-size:11px;color:var(--text-muted);margin-top:2px">${isAr ? 'تاريخ الإنشاء:' : 'Generated:'} ${new Date().toLocaleDateString()}</div>
+            </div>
+          </div>
+          <div style="margin-top:14px;height:3px;background:linear-gradient(90deg,var(--accent),var(--accent-glow),transparent);border-radius:2px"></div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px">
+          <div class="report-kpi" style="border-top:3px solid #22c55e">
+            <div class="report-kpi-label">${isAr ? 'إجمالي الوحدات المتاحة' : 'Total Available'}</div>
+            <div class="report-kpi-value" style="color:#22c55e">${data.length}</div>
+          </div>
+          ${Object.entries(grouped).map(([type, items]) => `
+            <div class="report-kpi" style="border-top:3px solid var(--accent)">
+              <div class="report-kpi-label">${type}</div>
+              <div class="report-kpi-value" style="color:var(--accent)">${items.length}</div>
+            </div>
+          `).join('')}
+        </div>
+    `;
+
+    Object.entries(grouped).forEach(([typeName, items]) => {
+      html += `
+        <div class="table-card" style="margin-bottom:18px;">
+          <div class="table-header" style="background:rgba(34,197,94,0.07);border-bottom:2px solid #22c55e;">
+            <h3 style="margin:0;font-size:14px;font-weight:700;color:#22c55e;">📁 ${typeName} <span style="font-size:12px;color:var(--text-muted);font-weight:400;">(${items.length})</span></h3>
+          </div>
+          <table>
+            <thead><tr>
+              <th>${t('name')}</th>
+              <th style="text-align:right">${t('base_price')}</th>
+              <th>${isAr ? 'الوصف' : 'Description'}</th>
+            </tr></thead>
+            <tbody>
+              ${items.map(item => `
+                <tr>
+                  <td style="font-weight:600;color:var(--text-primary)">${item.name}</td>
+                  <td style="text-align:right;color:var(--green);font-weight:500">${fmtMoney(item.base_price)}</td>
+                  <td style="color:var(--text-muted)">${item.description || '—'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    });
+
+    html += `
+        <div class="report-print-footer">
+          <span>RentFlow &mdash; ${isAr ? 'نظام إدارة الإيجارات' : 'Rental Management System'}</span>
+          <span>${new Date().toLocaleDateString()}</span>
+        </div>
+      </div>
+    `;
+
+    content.innerHTML = html;
+  } catch (err) {
+    content.innerHTML = `<div class="empty-state"><p>Error: ${err.message}</p></div>`;
+  }
+}
+
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
 async function renderDashboard(el, actions) {
@@ -1138,45 +1268,148 @@ async function deleteAssetType(id) {
 
 let assetTypesCache = [];
 
+let _allAssetsCache = [];
+let _activeAssetTypeFilter = '';
+
 async function renderAssets(el, actions) {
   const [assets, types] = await Promise.all([
     api('/api/assets'),
     api('/api/asset-types'),
   ]);
   assetTypesCache = types;
+  _allAssetsCache = assets;
 
   actions.innerHTML = types.length
     ? `<button class="btn btn-primary" onclick="showAssetModal()">${t('btn_new_asset')}</button>`
     : '<span style="color:var(--text-muted);font-size:12px">Create an asset type first</span>';
 
-  if (!assets.length) {
-    el.innerHTML = '<div class="empty-state"><div class="empty-icon">🏢</div><p>No assets yet.</p></div>';
+  // Build type filter bar
+  const typeFilterBar = `
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:18px;">
+      <button class="btn btn-sm ${_activeAssetTypeFilter === '' ? 'btn-primary' : 'btn-secondary'}" onclick="filterAssetsByType('')">${t('all_types')}</button>
+      ${types.map(tp => `<button class="btn btn-sm ${_activeAssetTypeFilter === tp.id ? 'btn-primary' : 'btn-secondary'}" onclick="filterAssetsByType('${tp.id}')">${tp.name}</button>`).join('')}
+    </div>
+  `;
+
+  // Filter assets
+  const filtered = _activeAssetTypeFilter ? assets.filter(a => a.type_id === _activeAssetTypeFilter) : assets;
+
+  if (!filtered.length && !assets.length) {
+    el.innerHTML = typeFilterBar + '<div class="empty-state"><div class="empty-icon">🏢</div><p>No assets yet.</p></div>';
     return;
   }
 
-  el.innerHTML = `
-    <div class="table-card">
-      <table>
-        <thead><tr><th>${t('name')}</th><th>${t('type')}</th><th>${t('base_price')}</th><th>${t('status')}</th><th style="width:140px">${t('actions')}</th></tr></thead>
-        <tbody>
-          ${assets.map(a => `
-            <tr>
-              <td data-label="${t('name')}" style="color:var(--text-primary);font-weight:500">${a.name}</td>
-              <td data-label="${t('type')}">${a.type_name || '—'}</td>
-              <td data-label="${t('base_price')}">${fmtMoney(a.base_price)}</td>
-              <td data-label="${t('status')}"><span class="badge ${a.status === 'Available' ? 'badge-green' : a.status === 'Rented' ? 'badge-blue' : 'badge-red'}">${a.status}</span></td>
-              <td data-label="${t('actions')}">
-                <div class="action-btns">
-                  <button class="btn btn-secondary btn-sm" onclick='showAssetModal(${JSON.stringify(a)})'>${t('edit')}</button>
-                  <button class="btn btn-danger btn-sm" onclick="deleteAsset('${a.id}')">${t('delete')}</button>
-                </div>
-              </td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
+  if (!filtered.length) {
+    el.innerHTML = typeFilterBar + '<div class="empty-state"><div class="empty-icon">🔍</div><p>No assets match this filter.</p></div>';
+    return;
+  }
+
+  // Group by type
+  const grouped = {};
+  filtered.forEach(a => {
+    const key = a.type_name || '—';
+    if (!grouped[key]) grouped[key] = [];
+    grouped[key].push(a);
+  });
+
+  let tableHTML = '';
+  Object.entries(grouped).forEach(([typeName, group]) => {
+    tableHTML += `
+      <div class="table-card" style="margin-bottom:18px;">
+        <div class="table-header" style="background:rgba(var(--accent-rgb,100,110,200),0.10);border-bottom:2px solid var(--accent);">
+          <h3 style="margin:0;font-size:14px;font-weight:700;color:var(--accent);letter-spacing:0.03em;">📁 ${typeName} <span style="font-size:12px;color:var(--text-muted);font-weight:400;">(${group.length})</span></h3>
+        </div>
+        <table>
+          <thead><tr>
+            <th>${t('name')}</th>
+            <th>${t('base_price')}</th>
+            <th>${t('status')}</th>
+            <th style="width:140px">${t('actions')}</th>
+          </tr></thead>
+          <tbody>
+            ${group.map(a => `
+              <tr>
+                <td data-label="${t('name')}" style="color:var(--text-primary);font-weight:500">${a.name}</td>
+                <td data-label="${t('base_price')}">${fmtMoney(a.base_price)}</td>
+                <td data-label="${t('status')}"><span class="badge ${a.status === 'Available' ? 'badge-green' : a.status === 'Rented' ? 'badge-blue' : 'badge-red'}">${a.status}</span></td>
+                <td data-label="${t('actions')}">
+                  <div class="action-btns">
+                    <button class="btn btn-secondary btn-sm" onclick='showAssetModal(${JSON.stringify(a)})'>${t('edit')}</button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteAsset('${a.id}')">${t('delete')}</button>
+                  </div>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  });
+
+  el.innerHTML = typeFilterBar + tableHTML;
+}
+
+window.filterAssetsByType = function(typeId) {
+  _activeAssetTypeFilter = typeId;
+  // Re-render with cached data without re-fetching
+  const filtered = typeId ? _allAssetsCache.filter(a => a.type_id === typeId) : _allAssetsCache;
+  const el = document.getElementById('pageContent');
+  const types = assetTypesCache;
+
+  const typeFilterBar = `
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:18px;">
+      <button class="btn btn-sm ${typeId === '' ? 'btn-primary' : 'btn-secondary'}" onclick="filterAssetsByType('')">${t('all_types')}</button>
+      ${types.map(tp => `<button class="btn btn-sm ${typeId === tp.id ? 'btn-primary' : 'btn-secondary'}" onclick="filterAssetsByType('${tp.id}')">${tp.name}</button>`).join('')}
     </div>
   `;
+
+  if (!filtered.length) {
+    el.innerHTML = typeFilterBar + '<div class="empty-state"><div class="empty-icon">🔍</div><p>No assets match this filter.</p></div>';
+    return;
+  }
+
+  const grouped = {};
+  filtered.forEach(a => {
+    const key = a.type_name || '—';
+    if (!grouped[key]) grouped[key] = [];
+    grouped[key].push(a);
+  });
+
+  let tableHTML = '';
+  Object.entries(grouped).forEach(([typeName, group]) => {
+    tableHTML += `
+      <div class="table-card" style="margin-bottom:18px;">
+        <div class="table-header" style="background:rgba(var(--accent-rgb,100,110,200),0.10);border-bottom:2px solid var(--accent);">
+          <h3 style="margin:0;font-size:14px;font-weight:700;color:var(--accent);letter-spacing:0.03em;">📁 ${typeName} <span style="font-size:12px;color:var(--text-muted);font-weight:400;">(${group.length})</span></h3>
+        </div>
+        <table>
+          <thead><tr>
+            <th>${t('name')}</th>
+            <th>${t('base_price')}</th>
+            <th>${t('status')}</th>
+            <th style="width:140px">${t('actions')}</th>
+          </tr></thead>
+          <tbody>
+            ${group.map(a => `
+              <tr>
+                <td data-label="${t('name')}" style="color:var(--text-primary);font-weight:500">${a.name}</td>
+                <td data-label="${t('base_price')}">${fmtMoney(a.base_price)}</td>
+                <td data-label="${t('status')}"><span class="badge ${a.status === 'Available' ? 'badge-green' : a.status === 'Rented' ? 'badge-blue' : 'badge-red'}">${a.status}</span></td>
+                <td data-label="${t('actions')}">
+                  <div class="action-btns">
+                    <button class="btn btn-secondary btn-sm" onclick='showAssetModal(${JSON.stringify(a)})'>${t('edit')}</button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteAsset('${a.id}')">${t('delete')}</button>
+                  </div>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  });
+
+  el.innerHTML = typeFilterBar + tableHTML;
 }
 
 function showAssetModal(asset = null) {

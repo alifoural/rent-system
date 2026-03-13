@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models import Asset
+from app.models import Asset, AssetType
 from app.schemas import AssetCreate, AssetUpdate, AssetOut
 
 router = APIRouter(prefix="/api/assets", tags=["Assets"])
@@ -27,11 +28,15 @@ def _to_out(obj: Asset) -> dict:
 
 @router.get("/", response_model=list[AssetOut])
 async def list_assets(
-    include_deleted: bool = False, db: AsyncSession = Depends(get_db)
+    include_deleted: bool = False,
+    type_id: Optional[str] = Query(None, description="Filter by asset type ID"),
+    db: AsyncSession = Depends(get_db)
 ):
-    stmt = select(Asset).order_by(Asset.created_at.desc())
+    stmt = select(Asset).join(Asset.asset_type, isouter=True).order_by(AssetType.name, Asset.name)
     if not include_deleted:
         stmt = stmt.where(Asset.is_deleted == False)  # noqa: E712
+    if type_id:
+        stmt = stmt.where(Asset.type_id == type_id)
     result = await db.execute(stmt)
     return [_to_out(a) for a in result.scalars().all()]
 

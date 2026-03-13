@@ -218,3 +218,10 @@ class ExpenseReport(BaseModel):
     total_amount: Decimal
     year: int
     month: Optional[int] = None
+
+# ── Available for Rent ───────────────────────────────────────────────────────
+class AvailableAssetItem(BaseModel):
+    type_name: str
+    name: str
+    base_price: Decimal
+    description: Optional[str] = None

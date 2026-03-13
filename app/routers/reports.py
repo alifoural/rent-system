@@ -20,9 +20,33 @@ from app.schemas import (
     DynamicReportItem,
     ExpenseReport,
     ExpenseReportItem,
+    AvailableAssetItem,
 )
 
 router = APIRouter(prefix="/api/reports", tags=["Reports"])
+
+
+@router.get("/available", response_model=list[AvailableAssetItem])
+async def available_assets_report(db: AsyncSession = Depends(get_db)):
+    """Returns all currently available (not rented) assets, sorted by type then name."""
+    stmt = (
+        select(Asset)
+        .join(Asset.asset_type, isouter=True)
+        .where(Asset.is_deleted == False)  # noqa: E712
+        .where(Asset.status == "Available")
+        .order_by(AssetType.name, Asset.name)
+    )
+    result = await db.execute(stmt)
+    assets = result.scalars().all()
+    return [
+        AvailableAssetItem(
+            type_name=a.asset_type.name if a.asset_type else "—",
+            name=a.name,
+            base_price=a.base_price,
+            description=a.description,
+        )
+        for a in assets
+    ]
 
 
 @router.get("/summary", response_model=SummaryReport)
