@@ -21,6 +21,16 @@ We've evolved the financial logic into a two-pillar system:
 - **Fluid Transitions**: Seamlessly switch between a premium "Night Mode" and a crisp "Light Mode".
 - **State Persistence**: The application remembers your theme preference across sessions using `localStorage`.
 
+### 5. Financial Journal & Inline Editing
+- **Chronological Ledger**: A comprehensive financial journal logging all sales and collections with advanced filtering.
+- **Frictionless Corrections**: Direct inline editing of payment records within the history table, automatically recalculating invoice balances and ensuring data integrity.
+
+### 6. Universal QAR Standardization
+- **Unified Currency**: Enforced QAR as the default and standard currency across all dashboards, reports, and financial views for absolute accounting consistency.
+
+### 7. Executive Professional Reports
+- **Comprehensive Financials**: Seamless generation of detailed Profit & Loss (P&L) statements and highly professional, print-ready monthly status reports.
+
 ## 📂 Project Architecture
 
 ```text

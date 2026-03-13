@@ -32,6 +32,9 @@ Rent System/
 - **Dynamic Calculation:** Automated lease totaling based on monthly rent inputs.
 - **Dual Financial Tracking:** Specialized modules for tracking incoming Revenues and outgoing Expenses.
 - **Bilingual RTL Support:** Native Arabic support with automatic layout mirroring.
+- **Financial Journal & Inline Editing:** Comprehensive ledger of chronological sales/payments with direct inline editing capabilities.
+- **Standardized Currency:** Fully unified QAR currency display across the entire application for accurate accounting.
+- **Professional Reports:** Print-ready monthly status reports and comprehensive Profit & Loss statements tailored for executive review.
 
 ---
 

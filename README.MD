@@ -10,6 +10,7 @@ The system is a centralized platform to manage physical assets, track their rent
 - **Dynamic Categorization**: Support for diverse types (Rooms, Stores, Cars, etc.).
 - **Financial Dual-Tracking**: Separate modules for **Revenues** (Rent collection) and **Expenses** (Operational costs).
 - **Intelligent Reporting**: Real-time status on collections, arrears, and annual asset history.
+- **Executive Reporting**: Professional P&L statements and standard QAR financial tracking.
 
 ## 2. Technical Architecture
 The system follows a Layered Architecture for maximum modularity.
@@ -35,6 +36,7 @@ The system follows a Layered Architecture for maximum modularity.
 ### 3.2 Financial Monitoring
 - **Revenues Dashboard**: Tracks every payment against specific Lease IDs.
 - **Expense Logging**: A dedicated interface to record miscellaneous business costs like maintenance or utilities.
+- **Financial Journal & Inline Editing**: Comprehensive chronological ledger with frictionless inline payment correction capabilities.
 
 ### 3.3 Reporting Engine
 - **Monthly Status**: A dynamic view showing Expected vs. Paid rent for all assets in a given month.

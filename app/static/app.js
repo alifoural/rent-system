@@ -29,6 +29,10 @@ function fmt(n) {
   return Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function fmtMoney(n) {
+  return `${t('currency')} ${fmt(n)}`;
+}
+
 function fmtDate(d) {
   if (!d) return '—';
   return new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
@@ -115,9 +119,11 @@ const translations = {
     asset_type: 'Type',
     payment_date: 'Payment Date',
     tab_monthly_status: 'Monthly Status',
+    tab_financial: 'Financial Report',
     theme_light: 'Light Mode',
     theme_dark: 'Night Mode',
-    theme_toggle: 'Night Mode'
+    theme_toggle: 'Night Mode',
+    currency: 'QAR'
   },
   ar: {
     app_name: 'رنت فلو',
@@ -199,9 +205,11 @@ const translations = {
     asset_type: 'النوع',
     payment_date: 'تاريخ الدفع',
     tab_monthly_status: 'الحالة الشهرية',
+    tab_financial: 'التقرير المالي',
     theme_light: 'الوضع النهاري',
     theme_dark: 'الوضع الليلي',
-    theme_toggle: 'الوضع الليلي'
+    theme_toggle: 'الوضع الليلي',
+    currency: 'ر.ق'
   }
 };
 
@@ -347,7 +355,7 @@ async function renderPage(page) {
 
 // ─── Reports ─────────────────────────────────────────────────────────────
 
-let currentReportTab = 'monthly';
+let currentReportTab = 'monthly_status';
 let monthlyReportData = [];
 
 async function renderReports(el, actions) {
@@ -357,6 +365,7 @@ async function renderReports(el, actions) {
       <button class="tab-btn ${currentReportTab === 'monthly_status' ? 'active' : ''}" onclick="switchReportTab('monthly_status')">${t('tab_monthly_status')}</button>
       <button class="tab-btn ${currentReportTab === 'monthly' ? 'active' : ''}" onclick="switchReportTab('monthly')">${t('tab_monthly')}</button>
       <button class="tab-btn ${currentReportTab === 'annual' ? 'active' : ''}" onclick="switchReportTab('annual')">${t('tab_annual')}</button>
+      <button class="tab-btn ${currentReportTab === 'financial' ? 'active' : ''}" onclick="switchReportTab('financial')">${t('tab_financial')}</button>
       <button class="tab-btn ${currentReportTab === 'expenses' ? 'active' : ''}" onclick="switchReportTab('expenses')">${t('tab_expenses')}</button>
     </div>
     <div id="reportFilters" class="report-filter-bar"></div>
@@ -366,11 +375,12 @@ async function renderReports(el, actions) {
   if (currentReportTab === 'monthly_status') await renderMonthlyStatusTab(filterContainer);
   else if (currentReportTab === 'monthly') await renderMonthlyTab(filterContainer);
   else if (currentReportTab === 'annual') await renderAnnualTab(filterContainer);
+  else if (currentReportTab === 'financial') await renderFinancialTab(filterContainer);
   else await renderExpensesTab(filterContainer);
 
   actions.innerHTML = `
     <button class="btn btn-secondary" style="margin-right:8px" onclick="exportToExcel()"><span class="icon">📊</span> ${t('export_excel')}</button>
-    <button class="btn btn-secondary" onclick="exportToPDF()"><span class="icon">📄</span> ${t('export_pdf')}</button>
+    <button class="btn btn-secondary" onclick="exportToPDF()"><span class="icon">🖨️</span> ${t('export_pdf')}</button>
   `;
 }
 
@@ -384,11 +394,11 @@ let monthlyStatusData = [];
 
 async function renderMonthlyStatusTab(container) {
   const today = new Date();
-  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   container.innerHTML = `
     <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center; width:100%; margin-bottom:24px;">
       <select id="statusMonth" class="form-control" style="width:140px; height:42px; padding:0 10px;">
-        ${monthNames.map((m, i) => `<option value="${i+1}" ${i+1 === today.getMonth()+1 ? 'selected' : ''}>${m}</option>`).join('')}
+        ${monthNames.map((m, i) => `<option value="${i + 1}" ${i + 1 === today.getMonth() + 1 ? 'selected' : ''}>${m}</option>`).join('')}
       </select>
       <input type="number" id="statusYear" class="form-control" style="width:100px; height:42px; padding:0 10px;" value="${today.getFullYear()}">
       <button class="btn btn-primary" onclick="loadMonthlyStatusReport()" style="height:42px;">${t('generate')}</button>
@@ -398,7 +408,7 @@ async function renderMonthlyStatusTab(container) {
   setTimeout(loadMonthlyStatusReport, 50);
 }
 
-window.loadMonthlyStatusReport = async function() {
+window.loadMonthlyStatusReport = async function () {
   const container = document.getElementById('monthlyStatusContainer');
   const month = document.getElementById('statusMonth').value;
   const year = document.getElementById('statusYear').value;
@@ -407,69 +417,281 @@ window.loadMonthlyStatusReport = async function() {
   try {
     monthlyStatusData = await api(`/api/reports/monthly?year=${year}&month=${month}`);
     renderMonthlyStatusTable(month, year);
-  } catch(err) { toast(err.message, 'error'); }
+  } catch (err) { toast(err.message, 'error'); }
 }
 
-window.renderMonthlyStatusTable = function(month, year) {
+window.renderMonthlyStatusTable = function (month, year) {
   const container = document.getElementById('monthlyStatusContainer');
   if (!monthlyStatusData.length) {
     container.innerHTML = `<div class="empty-state"><div class="empty-icon">📄</div><p>No data found.</p></div>`;
     return;
   }
-  const statusBadge = s => {
-    if (s === 'Paid') return `<span class="badge badge-green">${t('paid_status')}</span>`;
-    if (s === 'Partially Paid') return `<span class="badge badge-yellow">${t('partial_status')}</span>`;
-    if (s === 'Vacant') return `<span class="badge badge-grey" style="background:rgba(255,255,255,0.08);color:var(--text-muted)">${t('vacant_status')}</span>`;
-    return `<span class="badge badge-red">${t('unpaid_status')}</span>`;
-  };
+  const isAr = currentLang === 'ar';
+  const monthLabel = new Date(year, month - 1).toLocaleDateString(isAr ? 'ar-SA' : 'en-US', { month: 'long', year: 'numeric' });
+  const statusColor = s => s === 'Paid' ? '#22c55e' : s === 'Partially Paid' ? '#f59e0b' : s === 'Vacant' ? '#64748b' : '#ef4444';
+  const statusText = s => t(s === 'Paid' ? 'paid_status' : s === 'Partially Paid' ? 'partial_status' : s === 'Vacant' ? 'vacant_status' : 'unpaid_status');
+
+  const totalExpected = monthlyStatusData.reduce((s, r) => s + Number(r.expected_rent), 0);
+  const totalPaid = monthlyStatusData.reduce((s, r) => s + Number(r.amount_paid), 0);
+  const totalBalance = monthlyStatusData.reduce((s, r) => s + Number(r.balance), 0);
+  const paidCount = monthlyStatusData.filter(r => r.status === 'Paid').length;
+  const partialCount = monthlyStatusData.filter(r => r.status === 'Partially Paid').length;
+  const unpaidCount = monthlyStatusData.filter(r => r.status === 'Unpaid').length;
+
   const rows = monthlyStatusData.map((item, i) => `
     <tr>
-      <td style="color:var(--text-muted);text-align:center">${i+1}</td>
-      <td data-label="${t('asset_type')}">${item.asset_type_name || '—'}</td>
-      <td data-label="${t('asset_name')}" style="color:var(--text-primary);font-weight:500">${item.asset_name}</td>
-      <td data-label="${t('tenant_name')}">${item.tenant_name}</td>
-      <td data-label="${t('expected_rent')}">$${fmt(item.expected_rent)}</td>
-      <td data-label="${t('paid_amount')}" style="color:var(--green)">$${fmt(item.amount_paid)}</td>
-      <td data-label="${t('balance')}" style="color:${Number(item.balance)>0?'var(--yellow)':'var(--text-muted)'}">$${fmt(item.balance)}</td>
-      <td data-label="${t('payment_date')}">${fmtDate(item.last_payment_date)}</td>
-      <td data-label="${t('status')}">${statusBadge(item.status)}</td>
+      <td style="color:var(--text-muted);text-align:center;font-size:12px">${i + 1}</td>
+      <td>${item.asset_type_name || '—'}</td>
+      <td style="font-weight:600;color:var(--text-primary)">${item.asset_name}</td>
+      <td>${item.tenant_name}</td>
+      <td style="text-align:right">${fmtMoney(item.expected_rent)}</td>
+      <td style="text-align:right;color:var(--green);font-weight:500">${fmtMoney(item.amount_paid)}</td>
+      <td style="text-align:right;color:${Number(item.balance) > 0 ? 'var(--yellow)' : 'var(--text-muted)'}">${fmtMoney(item.balance)}</td>
+      <td style="text-align:center">${fmtDate(item.last_payment_date)}</td>
+      <td style="text-align:center"><span class="badge" style="background:${statusColor(item.status)}22;color:${statusColor(item.status)};border:1px solid ${statusColor(item.status)}55">${statusText(item.status)}</span></td>
     </tr>
   `).join('');
 
-  const totalPaid = monthlyStatusData.reduce((s, r) => s + Number(r.amount_paid), 0);
-  const totalBalance = monthlyStatusData.reduce((s, r) => s + Number(r.balance), 0);
-  const totalExpected = monthlyStatusData.reduce((s, r) => s + Number(r.expected_rent), 0);
-
   container.innerHTML = `
-    <div class="stat-grid" style="grid-template-columns:repeat(3,1fr); margin-bottom:20px;">
-      <div class="stat-card blue"><div class="stat-value">$${fmt(totalExpected)}</div><div class="stat-label">${t('expected_rent')}</div></div>
-      <div class="stat-card green"><div class="stat-value">$${fmt(totalPaid)}</div><div class="stat-label">${t('paid_amount')}</div></div>
-      <div class="stat-card red"><div class="stat-value">$${fmt(totalBalance)}</div><div class="stat-label">${t('balance')}</div></div>
-    </div>
-    <div class="table-card" id="monthlyStatusTable">
-      <div class="table-header"><h3>📋 ${t('tab_monthly_status')} — ${new Date(year, month-1).toLocaleDateString('en-US',{month:'long',year:'numeric'})}</h3></div>
-      <table>
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>${t('asset_type')}</th>
-            <th>${t('asset_name')}</th>
-            <th>${t('tenant_name')}</th>
-            <th>${t('expected_rent')}</th>
-            <th>${t('paid_amount')}</th>
-            <th>${t('balance')}</th>
-            <th>${t('payment_date')}</th>
-            <th>${t('status')}</th>
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>
+    <div id="printableReport">
+      <div class="report-print-header">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;">
+          <div>
+            <div style="font-size:22px;font-weight:800;letter-spacing:-0.5px">🏢 RentFlow</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:2px">${isAr ? 'نظام إدارة الأصول والإيجارات' : 'Asset Management & Rental System'}</div>
+          </div>
+          <div style="text-align:${isAr ? 'left' : 'right'}">
+            <div style="font-size:16px;font-weight:700">${isAr ? 'تقرير الحالة الشهرية' : 'Monthly Status Report'}</div>
+            <div style="font-size:13px;color:var(--accent);font-weight:600;margin-top:2px">${monthLabel}</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:2px">${isAr ? 'تاريخ الإنشاء:' : 'Generated:'} ${new Date().toLocaleDateString()}</div>
+          </div>
+        </div>
+        <div style="margin-top:14px;height:3px;background:linear-gradient(90deg,var(--accent),var(--accent-glow),transparent);border-radius:2px"></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">
+        <div class="report-kpi" style="border-top:3px solid #3b82f6">
+          <div class="report-kpi-label">${t('expected_rent')}</div>
+          <div class="report-kpi-value" style="color:#3b82f6">${fmtMoney(totalExpected)}</div>
+        </div>
+        <div class="report-kpi" style="border-top:3px solid #22c55e">
+          <div class="report-kpi-label">${t('paid_amount')}</div>
+          <div class="report-kpi-value" style="color:#22c55e">${fmtMoney(totalPaid)}</div>
+        </div>
+        <div class="report-kpi" style="border-top:3px solid ${totalBalance > 0 ? '#f59e0b' : '#22c55e'}">
+          <div class="report-kpi-label">${t('balance')}</div>
+          <div class="report-kpi-value" style="color:${totalBalance > 0 ? '#f59e0b' : '#22c55e'}">${fmtMoney(totalBalance)}</div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px">
+        <span class="badge badge-green" style="padding:5px 14px;font-size:12px">✓ ${t('paid_status')}: ${paidCount}</span>
+        <span class="badge badge-yellow" style="padding:5px 14px;font-size:12px">⚡ ${t('partial_status')}: ${partialCount}</span>
+        <span class="badge badge-red" style="padding:5px 14px;font-size:12px">✗ ${t('unpaid_status')}: ${unpaidCount}</span>
+        <span class="badge" style="padding:5px 14px;font-size:12px;background:rgba(255,255,255,0.07);color:var(--text-muted)">📋 ${isAr ? 'إجمالي الوحدات' : 'Total Units'}: ${monthlyStatusData.length}</span>
+      </div>
+
+      <div class="table-card" id="monthlyStatusTable">
+        <div class="table-header">
+          <h3>📋 ${isAr ? 'تفاصيل المدفوعات' : 'Payment Details'}</h3>
+          <span style="font-size:12px;color:var(--text-muted)">${monthLabel}</span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:36px">#</th>
+              <th>${t('asset_type')}</th>
+              <th>${t('asset_name')}</th>
+              <th>${t('tenant_name')}</th>
+              <th style="text-align:right">${t('expected_rent')}</th>
+              <th style="text-align:right">${t('paid_amount')}</th>
+              <th style="text-align:right">${t('balance')}</th>
+              <th style="text-align:center">${t('payment_date')}</th>
+              <th style="text-align:center">${t('status')}</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+          <tfoot>
+            <tr style="background:rgba(0,0,0,0.18);font-weight:700;font-size:14px">
+              <td colspan="4" style="padding:12px 18px;color:var(--text-secondary)">📊 ${isAr ? 'الإجمالي' : 'Total'}</td>
+              <td style="text-align:right;padding:12px 18px">${fmtMoney(totalExpected)}</td>
+              <td style="text-align:right;padding:12px 18px;color:var(--green)">${fmtMoney(totalPaid)}</td>
+              <td style="text-align:right;padding:12px 18px;color:${totalBalance > 0 ? 'var(--yellow)' : 'var(--green)'}">${fmtMoney(totalBalance)}</td>
+              <td colspan="2"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <div class="report-print-footer">
+        <span>RentFlow &mdash; ${isAr ? 'نظام إدارة الإيجارات' : 'Rental Management System'}</span>
+        <span>${new Date().toLocaleDateString()}</span>
+      </div>
     </div>
   `;
 }
 
+
+// ── Financial P&L Report ─────────────────────────────────────────────────────
+let financialData = null;
+
+async function renderFinancialTab(container) {
+  const currentYear = new Date().getFullYear();
+  container.innerHTML = `
+    <div style="display:flex;gap:10px;align-items:center;width:100%;margin-bottom:20px;">
+      <input type="number" id="financialYear" class="form-control" style="width:110px;height:42px;padding:0 10px;" value="${currentYear}">
+      <button class="btn btn-primary" onclick="loadFinancialReport()" style="height:42px;">${t('generate')}</button>
+    </div>
+  `;
+  document.getElementById('reportTabContent').innerHTML = `<div id="financialContainer"><div class="empty-state"><p>${t('loading')}</p></div></div>`;
+  setTimeout(loadFinancialReport, 50);
+}
+
+window.loadFinancialReport = async function () {
+  const container = document.getElementById('financialContainer');
+  const year = document.getElementById('financialYear').value;
+  container.innerHTML = `<div class="empty-state"><p>${t('loading')}</p></div>`;
+  try {
+    financialData = await api(`/api/reports/financial?year=${year}`);
+    renderFinancialReport(year);
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+function renderFinancialReport(year) {
+  const container = document.getElementById('financialContainer');
+  if (!financialData) return;
+  const isAr = currentLang === 'ar';
+  const totalRevenue = Number(financialData.total_revenue);
+  const totalExpenses = Number(financialData.total_expenses);
+  const netIncome = Number(financialData.net_income);
+  const isProfit = netIncome >= 0;
+
+  const monthRows = financialData.months.map(m => {
+    const rev = Number(m.revenue);
+    const exp = Number(m.expenses);
+    const net = Number(m.net_income);
+    const isMonthProfit = net >= 0;
+    if (rev === 0 && exp === 0) return '';
+    return `
+      <tr>
+        <td style="font-weight:600">${isAr ? arabicMonthName(m.month) : m.month_name}</td>
+        <td style="text-align:right;color:var(--green);font-weight:500">${fmtMoney(rev)}</td>
+        <td style="text-align:right;color:var(--red)">${fmtMoney(exp)}</td>
+        <td style="text-align:right;font-weight:700;color:${isMonthProfit ? 'var(--accent)' : 'var(--red)'}">
+          ${isMonthProfit ? '+' : ''}${fmtMoney(net)}
+        </td>
+      </tr>`;
+  }).join('');
+
+  container.innerHTML = `
+    <div id="printableReport">
+      <!-- Report Header -->
+      <div class="report-print-header">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;">
+          <div>
+            <div style="font-size:22px;font-weight:800;letter-spacing:-0.5px">🏢 RentFlow</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:2px">${isAr ? 'نظام إدارة الأصول والإيجارات' : 'Asset Management & Rental System'}</div>
+          </div>
+          <div style="text-align:${isAr ? 'left' : 'right'}">
+            <div style="font-size:16px;font-weight:700">${isAr ? 'التقرير المالي الشامل' : 'Financial Statement (P&L)'}</div>
+            <div style="font-size:13px;color:var(--accent);font-weight:600;margin-top:2px">${isAr ? 'سنة' : 'Year'} ${year}</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:2px">${isAr ? 'تاريخ الإنشاء:' : 'Generated:'} ${new Date().toLocaleDateString()}</div>
+          </div>
+        </div>
+        <div style="margin-top:14px;height:3px;background:linear-gradient(90deg,var(--accent),var(--accent-glow),transparent);border-radius:2px"></div>
+      </div>
+
+      <!-- KPI Headline Cards -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px">
+        <div class="report-kpi" style="border-top:3px solid #22c55e">
+          <div class="report-kpi-icon">💰</div>
+          <div class="report-kpi-label">${isAr ? 'إجمالي الإيرادات' : 'Total Revenue'}</div>
+          <div class="report-kpi-value" style="color:#22c55e">${fmtMoney(totalRevenue)}</div>
+        </div>
+        <div class="report-kpi" style="border-top:3px solid #ef4444">
+          <div class="report-kpi-icon">💸</div>
+          <div class="report-kpi-label">${isAr ? 'إجمالي المصروفات' : 'Total Expenses'}</div>
+          <div class="report-kpi-value" style="color:#ef4444">${fmtMoney(totalExpenses)}</div>
+        </div>
+        <div class="report-kpi" style="border-top:3px solid ${isProfit ? '#8b5cf6' : '#ef4444'}">
+          <div class="report-kpi-icon">${isProfit ? '📈' : '📉'}</div>
+          <div class="report-kpi-label">${isAr ? 'صافي الربح / الخسارة' : 'Net Income / Loss'}</div>
+          <div class="report-kpi-value" style="color:${isProfit ? 'var(--accent)' : '#ef4444'}">${isProfit ? '+' : ''}${fmtMoney(Math.abs(netIncome))}</div>
+        </div>
+      </div>
+
+      <!-- Monthly Breakdown Table -->
+      ${monthRows ? `
+      <div class="table-card" style="margin-bottom:24px">
+        <div class="table-header">
+          <h3>📅 ${isAr ? 'الملخص الشهري' : 'Monthly Breakdown'}</h3>
+          <span style="font-size:12px;color:var(--text-muted)">${year}</span>
+        </div>
+        <table>
+          <thead><tr>
+            <th>${isAr ? 'الشهر' : 'Month'}</th>
+            <th style="text-align:right">${isAr ? 'الإيرادات' : 'Revenue'}</th>
+            <th style="text-align:right">${isAr ? 'المصروفات' : 'Expenses'}</th>
+            <th style="text-align:right">${isAr ? 'الصافي' : 'Net Income'}</th>
+          </tr></thead>
+          <tbody>${monthRows}</tbody>
+          <tfoot>
+            <tr style="background:rgba(0,0,0,0.18);font-weight:700;font-size:14px">
+              <td style="padding:12px 18px">${isAr ? '📊 الإجمالي السنوي' : '📊 Annual Total'}</td>
+              <td style="text-align:right;padding:12px 18px;color:var(--green)">${fmtMoney(totalRevenue)}</td>
+              <td style="text-align:right;padding:12px 18px;color:var(--red)">${fmtMoney(totalExpenses)}</td>
+              <td style="text-align:right;padding:12px 18px;color:${isProfit ? 'var(--accent)' : 'var(--red)'}">${isProfit ? '+' : ''}${fmtMoney(netIncome)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>` : `<div class="empty-state"><p>${isAr ? 'لا توجد بيانات لهذه السنة' : 'No transactions found for this year.'}</p></div>`}
+
+      <!-- Income Statement Summary -->
+      <div class="table-card">
+        <div class="table-header"><h3>📋 ${isAr ? 'قائمة الدخل' : 'Income Statement'}</h3></div>
+        <table>
+          <tbody>
+            <tr style="background:rgba(34,197,94,0.06)">
+              <td style="padding:14px 18px;font-weight:600;color:var(--text-primary)">${isAr ? 'إجمالي الإيرادات (إيجارات)' : 'Gross Revenue (Rent Collected)'}</td>
+              <td style="padding:14px 18px;text-align:right;font-weight:700;color:var(--green);font-size:16px">${fmtMoney(totalRevenue)}</td>
+            </tr>
+            <tr style="background:rgba(239,68,68,0.06)">
+              <td style="padding:14px 18px;font-weight:600;color:var(--text-primary)">${isAr ? 'إجمالي المصروفات التشغيلية' : 'Total Operating Expenses'}</td>
+              <td style="padding:14px 18px;text-align:right;font-weight:700;color:var(--red);font-size:16px">(${fmtMoney(totalExpenses)})</td>
+            </tr>
+            <tr style="background:${isProfit ? 'rgba(139,92,246,0.08)' : 'rgba(239,68,68,0.08)'}">
+              <td style="padding:16px 18px;font-weight:700;font-size:15px;color:var(--text-primary)">${isAr ? (isProfit ? '💰 صافي الربح' : '📉 صافي الخسارة') : (isProfit ? '💰 Net Profit' : '📉 Net Loss')}</td>
+              <td style="padding:16px 18px;text-align:right;font-weight:800;font-size:20px;color:${isProfit ? 'var(--accent)' : 'var(--red)'}">
+                ${isProfit ? '+' : ''}${fmtMoney(Math.abs(netIncome))}
+              </td>
+            </tr>
+            ${totalRevenue > 0 ? `
+            <tr>
+              <td style="padding:12px 18px;color:var(--text-muted)">${isAr ? 'هامش الربح الصافي' : 'Net Profit Margin'}</td>
+              <td style="padding:12px 18px;text-align:right;color:${isProfit ? 'var(--accent)' : 'var(--red)'}">
+                ${((netIncome / totalRevenue) * 100).toFixed(1)}%
+              </td>
+            </tr>` : ''}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Print Footer -->
+      <div class="report-print-footer">
+        <span>RentFlow &mdash; ${isAr ? 'نظام إدارة الإيجارات' : 'Rental Management System'}</span>
+        <span>${year} &mdash; ${new Date().toLocaleDateString()}</span>
+      </div>
+    </div>
+  `;
+}
+
+function arabicMonthName(m) {
+  const names = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+  return names[m - 1] || m;
+}
+
 // ── Excel Export (SheetJS) ───────────────────────────────────────────────────
-window.exportToExcel = function() {
+window.exportToExcel = function () {
   if (currentReportTab === 'monthly_status' && monthlyStatusData.length > 0) {
     const rows = monthlyStatusData.map((item, i) => ({
       '#': i + 1,
@@ -553,9 +775,9 @@ window.renderMonthlyTable = function () {
           <td data-label="${t('asset_name')}" style="color:var(--text-primary);font-weight:500">${item.asset_name}</td>
           <td data-label="${t('type')}">${item.asset_type}</td>
           <td data-label="${t('tenant_name')}" style="color:${item.tenant_name === '—' ? 'var(--text-muted)' : 'inherit'}">${item.tenant_name} <span style="font-size:12px;color:var(--text-muted)">${item.phone_number || ''}</span>${phoneHtml}</td>
-          <td data-label="${t('expected_rent')}">QAR ${fmt(item.expected_rent)}</td>
-          <td data-label="${t('paid_amount')}" style="color:var(--green)">QAR ${fmt(item.amount_paid)} <span style="font-size:11px;color:var(--text-muted)">(${percent}%)</span></td>
-          <td data-label="${t('balance')}" style="color:${isOverdue ? 'var(--red)' : 'var(--text-muted)'}">QAR ${fmt(item.balance)}</td>
+          <td data-label="${t('expected_rent')}">${fmtMoney(item.expected_rent)}</td>
+          <td data-label="${t('paid_amount')}" style="color:var(--green)">${fmtMoney(item.amount_paid)} <span style="font-size:11px;color:var(--text-muted)">(${percent}%)</span></td>
+          <td data-label="${t('balance')}" style="color:${isOverdue ? 'var(--red)' : 'var(--text-muted)'}">${fmtMoney(item.balance)}</td>
           <td data-label="${t('date')}">${fmtDate(item.payment_date)}</td>
           <td data-label="${t('status')}"><span class="badge ${isOverdue ? 'badge-red' : 'badge-green'}">${isOverdue ? t('unpaid_status') : t('paid_status')}</span></td>
         </tr>
@@ -649,9 +871,9 @@ window.loadAnnualReport = async function () {
 
     container.innerHTML = `
       <div class="stat-grid" style="grid-template-columns: repeat(3, 1fr);">
-        <div class="stat-card blue"><div class="stat-value">QAR ${fmt(data.total_expected_rent)}</div><div class="stat-label">${t('expected_rent')}</div></div>
-        <div class="stat-card green"><div class="stat-value">QAR ${fmt(data.total_paid)}</div><div class="stat-label">${t('paid_amount')}</div></div>
-        <div class="stat-card red"><div class="stat-value">QAR ${fmt(data.balance)}</div><div class="stat-label">${t('balance')}</div></div>
+        <div class="stat-card blue"><div class="stat-value">${fmtMoney(data.total_expected_rent)}</div><div class="stat-label">${t('expected_rent')}</div></div>
+        <div class="stat-card green"><div class="stat-value">${fmtMoney(data.total_paid)}</div><div class="stat-label">${t('paid_amount')}</div></div>
+        <div class="stat-card red"><div class="stat-value">${fmtMoney(data.balance)}</div><div class="stat-label">${t('balance')}</div></div>
       </div>
       
       <h3 style="margin-bottom: 12px; font-size: 15px;">${t('nav_leases')}</h3>
@@ -663,7 +885,7 @@ window.loadAnnualReport = async function () {
               <tr>
                 <td data-label="${t('tenant')}" style="color:var(--text-primary);font-weight:500">${l.tenant_name}</td>
                 <td data-label="${t('period')}">${fmtDate(l.start_date)} → ${fmtDate(l.end_date)}</td>
-                <td data-label="${t('contract')}">QAR ${fmt(l.contract_amount)}</td>
+                <td data-label="${t('contract')}">${fmtMoney(l.contract_amount)}</td>
               </tr>
             `).join('') : `<tr><td colspan="3" style="text-align:center;color:var(--text-muted)">No leases this year.</td></tr>`}
           </tbody>
@@ -678,7 +900,7 @@ window.loadAnnualReport = async function () {
             ${data.payments.length ? data.payments.map(p => `
               <tr>
                 <td data-label="${t('date')}">${fmtDate(p.date_collected)}</td>
-                <td data-label="${t('amount')}" style="color:var(--green);font-weight:500">QAR ${fmt(p.amount_paid)}</td>
+                <td data-label="${t('amount')}" style="color:var(--green);font-weight:500">${fmtMoney(p.amount_paid)}</td>
               </tr>
             `).join('') : `<tr><td colspan="2" style="text-align:center;color:var(--text-muted)">No payments this year.</td></tr>`}
           </tbody>
@@ -736,7 +958,7 @@ function renderExpensesTable(data) {
   container.innerHTML = `
     <div class="stat-grid" style="grid-template-columns: 1fr; margin-bottom: 24px;">
       <div class="stat-card yellow">
-        <div class="stat-value">QAR ${fmt(data.total_amount)}</div>
+        <div class="stat-value">${fmtMoney(data.total_amount)}</div>
         <div class="stat-label">${t('total_expenses')}</div>
       </div>
     </div>
@@ -747,7 +969,7 @@ function renderExpensesTable(data) {
           ${data.items.map(e => `
             <tr>
               <td data-label="${t('item')}" style="color:var(--text-primary);font-weight:500">${e.item}</td>
-              <td data-label="${t('amount')}" style="color:var(--red)">QAR ${fmt(e.amount)}</td>
+              <td data-label="${t('amount')}" style="color:var(--red)">${fmtMoney(e.amount)}</td>
               <td data-label="${t('date')}">${fmtDate(e.date_incurred)}</td>
               <td data-label="${t('notes')}">${e.notes || '—'}</td>
             </tr>
@@ -759,29 +981,9 @@ function renderExpensesTable(data) {
 }
 
 window.exportToPDF = function () {
-  const element = document.getElementById('pageContent');
-  const options = {
-    margin: [10, 10, 10, 10],
-    filename: `RentFlow_Report_${new Date().toISOString().split('T')[0]}.pdf`,
-    image: { type: 'jpeg', quality: 0.98 },
-    html2canvas: {
-      scale: 2,
-      letterRendering: true,
-      backgroundColor: document.documentElement.getAttribute('data-theme') === 'light' ? '#ffffff' : '#0f1117'
-    },
-    jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
-  };
-
-  // Temporarily hide things that shouldn't be in PDF
-  const filters = document.getElementById('reportFilters');
-  const tabs = document.querySelector('.tabs');
-  if (filters) filters.style.display = 'none';
-  if (tabs) tabs.style.display = 'none';
-
-  html2pdf().set(options).from(element).save().then(() => {
-    if (filters) filters.style.display = 'flex';
-    if (tabs) tabs.style.display = 'flex';
-  });
+  // Use native browser print for perfect Arabic (RTL) text rendering
+  // The CSS @media print handles the layout hiding automatically
+  window.print();
 }
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
@@ -810,12 +1012,12 @@ async function renderDashboard(el, actions) {
       </div>
       <div class="stat-card yellow">
         <div class="stat-icon">💰</div>
-        <div class="stat-value">QAR ${fmt(summary.total_revenue)}</div>
+        <div class="stat-value">${fmtMoney(summary.total_revenue)}</div>
         <div class="stat-label">${t('dashboard_revenue')}</div>
       </div>
       <div class="stat-card red">
         <div class="stat-icon">⏳</div>
-        <div class="stat-value">QAR ${fmt(summary.pending_balance)}</div>
+        <div class="stat-value">${fmtMoney(summary.pending_balance)}</div>
         <div class="stat-label">${t('dashboard_pending')}</div>
       </div>
     </div>
@@ -834,9 +1036,9 @@ async function renderDashboard(el, actions) {
             <tr>
               <td data-label="${t('tenant')}" style="color:var(--text-primary);font-weight:500">${l.tenant_name}</td>
               <td data-label="${t('asset')}">${l.asset_name || '—'}</td>
-              <td data-label="${t('contract')}">QAR ${fmt(l.total_contract_amount)}</td>
-              <td data-label="${t('paid')}" style="color:var(--green)">QAR ${fmt(l.paid_amount)}</td>
-              <td data-label="${t('remaining')}" style="color:var(--yellow)">QAR ${fmt(l.remaining)}</td>
+              <td data-label="${t('contract')}">${fmtMoney(l.total_contract_amount)}</td>
+              <td data-label="${t('paid')}" style="color:var(--green)">${fmtMoney(l.paid_amount)}</td>
+              <td data-label="${t('remaining')}" style="color:var(--yellow)">${fmtMoney(l.remaining)}</td>
               <td data-label="${t('end_date')}">${fmtDate(l.end_date)}</td>
             </tr>
           `).join('')}
@@ -961,7 +1163,7 @@ async function renderAssets(el, actions) {
             <tr>
               <td data-label="${t('name')}" style="color:var(--text-primary);font-weight:500">${a.name}</td>
               <td data-label="${t('type')}">${a.type_name || '—'}</td>
-              <td data-label="${t('base_price')}">QAR ${fmt(a.base_price)}</td>
+              <td data-label="${t('base_price')}">${fmtMoney(a.base_price)}</td>
               <td data-label="${t('status')}"><span class="badge ${a.status === 'Available' ? 'badge-green' : a.status === 'Rented' ? 'badge-blue' : 'badge-red'}">${a.status}</span></td>
               <td data-label="${t('actions')}">
                 <div class="action-btns">
@@ -1086,10 +1288,10 @@ async function renderLeases(el, actions) {
               <td data-label="${t('tenant')}" style="color:var(--text-primary);font-weight:500">${l.tenant_name}</td>
               <td data-label="${t('asset')}">${l.asset_name || '—'}</td>
               <td data-label="${t('period')}">${fmtDate(l.start_date)} → ${fmtDate(l.end_date)}</td>
-              <td data-label="${currentLang === 'ar' ? 'الإيجار الشهري' : 'Monthly Rent'}">QAR ${fmt(monthlyRent)}</td>
-              <td data-label="${t('contract')}">QAR ${fmt(l.total_contract_amount)}</td>
-              <td data-label="${t('paid')}" style="color:var(--green)">QAR ${fmt(l.paid_amount)}</td>
-              <td data-label="${t('remaining')}" style="color:${Number(l.remaining) > 0 ? 'var(--yellow)' : 'var(--green)'}">QAR ${fmt(l.remaining)}</td>
+              <td data-label="${currentLang === 'ar' ? 'الإيجار الشهري' : 'Monthly Rent'}">${fmtMoney(monthlyRent)}</td>
+              <td data-label="${t('contract')}">${fmtMoney(l.total_contract_amount)}</td>
+              <td data-label="${t('paid')}" style="color:var(--green)">${fmtMoney(l.paid_amount)}</td>
+              <td data-label="${t('remaining')}" style="color:${Number(l.remaining) > 0 ? 'var(--yellow)' : 'var(--green)'}">${fmtMoney(l.remaining)}</td>
               <td data-label="${t('actions')}">
                 <div class="action-btns">
                   <button class="btn btn-secondary btn-sm" onclick='showLeaseEditModal(${JSON.stringify(l)})'>${t('edit')}</button>
@@ -1330,7 +1532,7 @@ async function renderPayments(el, actions) {
           ${payments.map(p => `
             <tr>
               <td data-label="${t('tenant')}" style="color:var(--text-primary);font-weight:500">${p.tenant_name || '—'}</td>
-              <td data-label="${t('amount')}" style="color:var(--green)">QAR ${fmt(p.amount_paid)}</td>
+              <td data-label="${t('amount')}" style="color:var(--green)">${fmtMoney(p.amount_paid)}</td>
               <td data-label="${t('method')}"><span class="badge badge-blue">${p.payment_method}</span></td>
               <td data-label="${t('date')}">${fmtDate(p.date_collected)}</td>
               <td data-label="${t('actions')}">
@@ -1357,7 +1559,7 @@ function showPaymentModal() {
           <div class="form-group">
             <label>Lease</label>
             <select class="form-control" id="payLease">
-              ${leasesCache.map(l => `<option value="${l.id}">${l.tenant_name} — QAR ${fmt(l.remaining)} remaining</option>`).join('')}
+              ${leasesCache.map(l => `<option value="${l.id}">${l.tenant_name} — ${fmtMoney(l.remaining)} remaining</option>`).join('')}
             </select>
           </div>
           <div class="form-group">
@@ -1436,7 +1638,7 @@ async function renderExpenses(el, actions) {
           ${expenses.map(e => `
             <tr>
               <td data-label="${t('item')}" style="color:var(--text-primary);font-weight:500">${e.item}</td>
-              <td data-label="${t('amount')}" style="color:var(--yellow)">QAR ${fmt(e.amount)}</td>
+              <td data-label="${t('amount')}" style="color:var(--yellow)">${fmtMoney(e.amount)}</td>
               <td data-label="${t('date')}">${fmtDate(e.date_incurred)}</td>
               <td data-label="${t('notes')}">${e.notes || '—'}</td>
               <td data-label="${t('actions')}">

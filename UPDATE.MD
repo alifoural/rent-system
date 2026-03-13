@@ -33,5 +33,13 @@ This document tracks the evolution and recent major enhancements of the **RentFl
 - **Environment**: FastAPI (Backend) + Vanilla JS (Frontend) + Bootstrap 5 (Styling).
 - **Database**: PostgreSQL (Docker) / SQLite (Local).
 
+### 6. Professional Reports & Financial Journal
+- **Executive Reporting**: Added comprehensive Profit & Loss (P&L) statements and print-ready monthly status reports.
+- **Financial Journal**: Introduced a unified ledger view chronologically logging all sales and payments.
+- **Inline Editing**: Enabled direct inline editing of payment histories, instantly updating invoice balances.
+
+### 7. Universal QAR Standardization
+- **Currency Unification**: Standardized all metrics across the application to consistently use QAR.
+
 ---
-*Last Updated: March 12, 2026*
+*Last Updated: March 13, 2026*

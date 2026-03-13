@@ -1,16 +1,14 @@
 # Environment variables
-.env
+
 
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
-venv/
-env/
-.env
+
 
 # Database
-
+data/
 
 # Logs
 *.log

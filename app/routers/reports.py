@@ -325,3 +325,84 @@ async def expenses_report(
         year=year,
         month=month
     )
+
+
+@router.get("/financial")
+async def financial_report(
+    year: int = Query(..., description="Year of the report"),
+    db: AsyncSession = Depends(get_db)
+):
+    """Full P&L Income Statement: Revenues vs Expenses by month."""
+    from app.models import Expense
+
+    # Load all payments for the year
+    pay_result = await db.execute(
+        select(Payment).where(func.extract('year', Payment.date_collected) == year)
+    )
+    payments = pay_result.scalars().all()
+
+    # Load all expenses for the year
+    exp_result = await db.execute(
+        select(Expense).where(func.extract('year', Expense.date_incurred) == year)
+    )
+    expenses = exp_result.scalars().all()
+
+    # Also load lease info for each payment (tenant name)
+    lease_result = await db.execute(
+        select(Lease).options(selectinload(Lease.asset))
+    )
+    leases_map = {l.id: l for l in lease_result.scalars().all()}
+
+    # Build monthly buckets (1..12)
+    month_names = calendar.month_name  # 1-indexed
+    monthly = {}
+    for m in range(1, 13):
+        monthly[m] = {"revenue": Decimal("0"), "expenses": Decimal("0"), "revenue_items": [], "expense_items": []}
+
+    for p in payments:
+        m = p.date_collected.month
+        monthly[m]["revenue"] += p.amount_paid
+        lease = leases_map.get(str(p.lease_id)) or leases_map.get(p.lease_id)
+        asset_name = (lease.asset.name if lease and lease.asset else "")
+        tenant_name = (lease.tenant_name if lease else "")
+        monthly[m]["revenue_items"].append({
+            "date": str(p.date_collected),
+            "description": f"{tenant_name} — {asset_name}",
+            "amount": str(p.amount_paid),
+        })
+
+    for e in expenses:
+        m = e.date_incurred.month
+        monthly[m]["expenses"] += e.amount
+        monthly[m]["expense_items"].append({
+            "date": str(e.date_incurred),
+            "description": e.item,
+            "notes": e.notes or "",
+            "amount": str(e.amount),
+        })
+
+    total_revenue = sum(p.amount_paid for p in payments) or Decimal("0")
+    total_expenses = sum(e.amount for e in expenses) or Decimal("0")
+    net_income = total_revenue - total_expenses
+
+    months_data = []
+    for m in range(1, 13):
+        d = monthly[m]
+        net = d["revenue"] - d["expenses"]
+        months_data.append({
+            "month": m,
+            "month_name": month_names[m],
+            "revenue": str(d["revenue"]),
+            "expenses": str(d["expenses"]),
+            "net_income": str(net),
+            "revenue_items": d["revenue_items"],
+            "expense_items": d["expense_items"],
+        })
+
+    return {
+        "year": year,
+        "total_revenue": str(total_revenue),
+        "total_expenses": str(total_expenses),
+        "net_income": str(net_income),
+        "months": months_data,
+    }
