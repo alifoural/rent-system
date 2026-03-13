@@ -4,7 +4,16 @@ Welcome to **RentFlow**! This guide will walk you through setting up the system 
 
 We strongly recommend using **Docker** for running RentFlow, as it encapsulates all dependencies (database, backend, frontend) into a single, cohesive environment.
 
-## Prerequisites
+## Quick Start (Windows)
+
+If you are on Windows, you can use our **One-Click Installer**:
+
+1. Right-click `install.ps1` and select **Run with PowerShell**.
+2. The script will automatically check for dependencies, clone the repo, set up your `.env`, and start the system.
+
+---
+
+## Detailed Prerequisites
 
 Before you begin, ensure you have the following installed on your machine:
 
