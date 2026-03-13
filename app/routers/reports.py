@@ -239,6 +239,7 @@ async def dynamic_report(
     db: AsyncSession = Depends(get_db)
 ):
     query = select(Asset).where(Asset.is_deleted == False).options(
+        selectinload(Asset.asset_type),
         selectinload(Asset.leases).selectinload(Lease.payments)
     )
     if asset_id != "all":
@@ -253,31 +254,33 @@ async def dynamic_report(
     for asset in assets:
         for lease in asset.leases:
             # Check for ANY overlap with the requested period
-            # Overlap occurs if lease starts before period ends AND ends after period starts
             if lease.start_date <= end_date and lease.end_date >= start_date:
-                # Calculate expected rent for the overlapping period
-                # Simplified approach: If it overlaps, we consider the full base_price for this example.
-                # A more robust system prorates by day. We'll use base_price as the monthly expectation.
-                expected_rent = asset.base_price
+                # Based on client logic: Expected Rent per month is the monthly_rate
+                expected_rent = lease.monthly_rate if hasattr(lease, 'monthly_rate') and lease.monthly_rate else asset.base_price
                 
                 # Find payments made within this specific timeframe
-                paid_in_period = sum(
-                    p.amount_paid for p in lease.payments 
+                payments_in_period = [
+                    p for p in lease.payments 
                     if start_date <= p.date_collected <= end_date
-                )
+                ]
+                
+                paid_in_period = sum(p.amount_paid for p in payments_in_period)
+                payment_date = max((p.date_collected for p in payments_in_period), default=None)
                 
                 balance = max(Decimal("0"), expected_rent - paid_in_period)
                 
                 item = DynamicReportItem(
                     lease_id=lease.id,
                     asset_name=asset.name,
+                    asset_type=asset.asset_type.name if asset.asset_type else "Unknown",
                     tenant_name=lease.tenant_name,
                     phone_number=lease.phone_number,
                     expected_rent=expected_rent,
                     amount_paid=paid_in_period,
                     balance=balance,
                     start_date=lease.start_date,
-                    end_date=lease.end_date
+                    end_date=lease.end_date,
+                    payment_date=payment_date
                 )
                 
                 if balance > 0:

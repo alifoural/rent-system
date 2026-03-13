@@ -181,6 +181,7 @@ class AnnualReport(BaseModel):
 class DynamicReportItem(BaseModel):
     lease_id: str
     asset_name: str
+    asset_type: str
     tenant_name: str
     phone_number: Optional[str] = None
     expected_rent: Decimal
@@ -188,6 +189,7 @@ class DynamicReportItem(BaseModel):
     balance: Decimal
     start_date: date
     end_date: date
+    payment_date: Optional[date] = None
 
 class DynamicReport(BaseModel):
     paid: list[DynamicReportItem]

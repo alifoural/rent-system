@@ -216,12 +216,12 @@ function toggleLanguage() {
   localStorage.setItem('lang', currentLang);
   document.documentElement.setAttribute('dir', currentLang === 'ar' ? 'rtl' : 'ltr');
   document.documentElement.lang = currentLang;
-  
+
   // Update static DOM
   document.querySelectorAll('[data-i18n]').forEach(el => {
     el.textContent = t(el.getAttribute('data-i18n'));
   });
-  
+
   // Re-render current page
   navigate(currentPage);
 }
@@ -281,10 +281,10 @@ async function loadNotifications() {
         </div>
       `;
     }).join('');
-  } catch(e) { console.error('Failed to load notifications', e); }
+  } catch (e) { console.error('Failed to load notifications', e); }
 }
 
-window.toggleNotifications = function() {
+window.toggleNotifications = function () {
   document.getElementById('notificationDropdown').classList.toggle('open');
 }
 
@@ -307,7 +307,7 @@ let currentPage = 'dashboard';
 function navigate(page) {
   currentPage = page;
   closeSidebar();
-  
+
   document.querySelectorAll('.nav-item').forEach(el => {
     el.classList.toggle('active', el.dataset.page === page);
   });
@@ -374,7 +374,7 @@ async function renderReports(el, actions) {
   `;
 }
 
-window.switchReportTab = function(tab) {
+window.switchReportTab = function (tab) {
   currentReportTab = tab;
   navigate('reports');
 }
@@ -519,15 +519,15 @@ async function renderMonthlyTab(container) {
   setTimeout(loadMonthlyReport, 50);
 }
 
-window.loadMonthlyReport = async function() {
+window.loadMonthlyReport = async function () {
   const container = document.getElementById('monthlyReportContainer');
   const from = document.getElementById('reportFrom').value;
   const to = document.getElementById('reportTo').value;
-  
+
   if (!from || !to) return toast('Please select both dates', 'error');
 
   container.innerHTML = `<div class="empty-state"><p>${t('loading')}</p></div>`;
-  
+
   try {
     monthlyReportData = await api(`/api/reports/dynamic?start_date=${from}&end_date=${to}`);
     renderMonthlyTable();
@@ -536,44 +536,48 @@ window.loadMonthlyReport = async function() {
   }
 }
 
-window.renderMonthlyTable = function() {
-    const container = document.getElementById('monthlyReportContainer');
-    const { paid, overdue } = monthlyReportData;
-    
-    if (!paid.length && !overdue.length) {
-      container.innerHTML = `<div class="empty-state"><div class="empty-icon">📄</div><p>No data found for this period.</p></div>`;
-      return;
-    }
+window.renderMonthlyTable = function () {
+  const container = document.getElementById('monthlyReportContainer');
+  const { paid, overdue } = monthlyReportData;
 
-    const renderRows = (items, isOverdue) => items.map(item => {
-        const percent = item.expected_rent > 0 ? ((item.amount_paid / item.expected_rent) * 100).toFixed(0) : 0;
-        const phoneHtml = item.phone_number ? `<a href="https://wa.me/${item.phone_number}" target="_blank" style="color:var(--green);text-decoration:none;font-size:12px;margin-left:8px;">💬</a>` : '';
-        return `
+  if (!paid.length && !overdue.length) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon">📄</div><p>No data found for this period.</p></div>`;
+    return;
+  }
+
+  const renderRows = (items, isOverdue) => items.map(item => {
+    const percent = item.expected_rent > 0 ? ((item.amount_paid / item.expected_rent) * 100).toFixed(0) : 0;
+    const phoneHtml = item.phone_number ? `<a href="https://wa.me/${item.phone_number}" target="_blank" style="color:var(--green);text-decoration:none;font-size:12px;margin-left:8px;">💬</a>` : '';
+    return `
         <tr>
           <td data-label="${t('asset_name')}" style="color:var(--text-primary);font-weight:500">${item.asset_name}</td>
+          <td data-label="${t('type')}">${item.asset_type}</td>
           <td data-label="${t('tenant_name')}" style="color:${item.tenant_name === '—' ? 'var(--text-muted)' : 'inherit'}">${item.tenant_name} <span style="font-size:12px;color:var(--text-muted)">${item.phone_number || ''}</span>${phoneHtml}</td>
-          <td data-label="${t('expected_rent')}">$${fmt(item.expected_rent)}</td>
-          <td data-label="${t('paid_amount')}" style="color:var(--green)">$${fmt(item.amount_paid)} <span style="font-size:11px;color:var(--text-muted)">(${percent}%)</span></td>
-          <td data-label="${t('balance')}" style="color:${isOverdue ? 'var(--red)' : 'var(--text-muted)'}">$${fmt(item.balance)}</td>
+          <td data-label="${t('expected_rent')}">QAR ${fmt(item.expected_rent)}</td>
+          <td data-label="${t('paid_amount')}" style="color:var(--green)">QAR ${fmt(item.amount_paid)} <span style="font-size:11px;color:var(--text-muted)">(${percent}%)</span></td>
+          <td data-label="${t('balance')}" style="color:${isOverdue ? 'var(--red)' : 'var(--text-muted)'}">QAR ${fmt(item.balance)}</td>
+          <td data-label="${t('date')}">${fmtDate(item.payment_date)}</td>
           <td data-label="${t('status')}"><span class="badge ${isOverdue ? 'badge-red' : 'badge-green'}">${isOverdue ? t('unpaid_status') : t('paid_status')}</span></td>
         </tr>
         `;
-    }).join('');
+  }).join('');
 
-    let html = '';
+  let html = '';
 
-    if (paid.length > 0) {
-        html += `
+  if (paid.length > 0) {
+    html += `
             <div class="table-card" style="margin-bottom: 24px; border-left: 4px solid var(--green);">
                 <div class="table-header"><h3><span style="color:var(--green)">✓</span> ${t('successful_payments')} (${paid.length})</h3></div>
                 <table>
                   <thead>
                     <tr>
                       <th>${t('asset_name')}</th>
+                      <th>${t('type')}</th>
                       <th>${t('tenant_name')}</th>
                       <th>${t('expected_rent')}</th>
                       <th>${t('paid_amount')}</th>
                       <th>${t('balance')}</th>
+                      <th>${t('date')}</th>
                       <th>${t('status')}</th>
                     </tr>
                   </thead>
@@ -581,20 +585,22 @@ window.renderMonthlyTable = function() {
                 </table>
             </div>
         `;
-    }
+  }
 
-    if (overdue.length > 0) {
-        html += `
+  if (overdue.length > 0) {
+    html += `
             <div class="table-card" style="border-left: 4px solid var(--red);">
                 <div class="table-header"><h3><span style="color:var(--red)">!</span> ${t('late_payments')} (${overdue.length})</h3></div>
                 <table>
                   <thead>
                     <tr>
                       <th>${t('asset_name')}</th>
+                      <th>${t('type')}</th>
                       <th>${t('tenant_name')}</th>
                       <th>${t('expected_rent')}</th>
                       <th>${t('paid_amount')}</th>
                       <th>${t('balance')}</th>
+                      <th>${t('date')}</th>
                       <th>${t('status')}</th>
                     </tr>
                   </thead>
@@ -602,9 +608,9 @@ window.renderMonthlyTable = function() {
                 </table>
             </div>
         `;
-    }
+  }
 
-    container.innerHTML = html;
+  container.innerHTML = html;
 }
 
 
@@ -629,23 +635,23 @@ async function renderAnnualTab(container) {
   document.getElementById('reportTabContent').innerHTML = `<div id="annualReportContainer"><div class="empty-state"><p>${t('select_asset')} then generate</p></div></div>`;
 }
 
-window.loadAnnualReport = async function() {
+window.loadAnnualReport = async function () {
   const container = document.getElementById('annualReportContainer');
   const assetId = document.getElementById('annualAssetId').value;
   const year = document.getElementById('annualYear').value;
-  
+
   if (!assetId) return toast(t('select_asset'), 'error');
 
   container.innerHTML = `<div class="empty-state"><p>${t('loading')}</p></div>`;
-  
+
   try {
     const data = await api('/api/reports/annual/' + assetId + '?year=' + year);
-    
+
     container.innerHTML = `
       <div class="stat-grid" style="grid-template-columns: repeat(3, 1fr);">
-        <div class="stat-card blue"><div class="stat-value">$${fmt(data.total_expected_rent)}</div><div class="stat-label">${t('expected_rent')}</div></div>
-        <div class="stat-card green"><div class="stat-value">$${fmt(data.total_paid)}</div><div class="stat-label">${t('paid_amount')}</div></div>
-        <div class="stat-card red"><div class="stat-value">$${fmt(data.balance)}</div><div class="stat-label">${t('balance')}</div></div>
+        <div class="stat-card blue"><div class="stat-value">QAR ${fmt(data.total_expected_rent)}</div><div class="stat-label">${t('expected_rent')}</div></div>
+        <div class="stat-card green"><div class="stat-value">QAR ${fmt(data.total_paid)}</div><div class="stat-label">${t('paid_amount')}</div></div>
+        <div class="stat-card red"><div class="stat-value">QAR ${fmt(data.balance)}</div><div class="stat-label">${t('balance')}</div></div>
       </div>
       
       <h3 style="margin-bottom: 12px; font-size: 15px;">${t('nav_leases')}</h3>
@@ -657,7 +663,7 @@ window.loadAnnualReport = async function() {
               <tr>
                 <td data-label="${t('tenant')}" style="color:var(--text-primary);font-weight:500">${l.tenant_name}</td>
                 <td data-label="${t('period')}">${fmtDate(l.start_date)} → ${fmtDate(l.end_date)}</td>
-                <td data-label="${t('contract')}">$${fmt(l.contract_amount)}</td>
+                <td data-label="${t('contract')}">QAR ${fmt(l.contract_amount)}</td>
               </tr>
             `).join('') : `<tr><td colspan="3" style="text-align:center;color:var(--text-muted)">No leases this year.</td></tr>`}
           </tbody>
@@ -672,7 +678,7 @@ window.loadAnnualReport = async function() {
             ${data.payments.length ? data.payments.map(p => `
               <tr>
                 <td data-label="${t('date')}">${fmtDate(p.date_collected)}</td>
-                <td data-label="${t('amount')}" style="color:var(--green);font-weight:500">$${fmt(p.amount_paid)}</td>
+                <td data-label="${t('amount')}" style="color:var(--green);font-weight:500">QAR ${fmt(p.amount_paid)}</td>
               </tr>
             `).join('') : `<tr><td colspan="2" style="text-align:center;color:var(--text-muted)">No payments this year.</td></tr>`}
           </tbody>
@@ -693,7 +699,7 @@ async function renderExpensesTab(container) {
     <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center; width: 100%; margin-bottom: 24px;">
       <select id="expenseReportMonth" class="form-control" style="width:140px; height:42px;">
         <option value="">Full Year</option>
-        ${Array.from({length:12}, (_, i) => `<option value="${i+1}" ${i+1===currentMonth?'selected':''}>${new Date(0, i).toLocaleString(currentLang, {month:'long'})}</option>`).join('')}
+        ${Array.from({ length: 12 }, (_, i) => `<option value="${i + 1}" ${i + 1 === currentMonth ? 'selected' : ''}>${new Date(0, i).toLocaleString(currentLang, { month: 'long' })}</option>`).join('')}
       </select>
       <input type="number" id="expenseReportYear" class="form-control" value="${currentYear}" style="width:100px; height:42px;">
       <button class="btn btn-primary" onclick="loadExpensesReport()" style="height:42px;">${t('generate')}</button>
@@ -703,13 +709,13 @@ async function renderExpensesTab(container) {
   setTimeout(loadExpensesReport, 50);
 }
 
-window.loadExpensesReport = async function() {
+window.loadExpensesReport = async function () {
   const container = document.getElementById('expenseReportContainer');
   const month = document.getElementById('expenseReportMonth').value;
   const year = document.getElementById('expenseReportYear').value;
-  
+
   container.innerHTML = `<div class="empty-state"><p>${t('loading')}</p></div>`;
-  
+
   try {
     const query = month ? `?year=${year}&month=${month}` : `?year=${year}`;
     const data = await api('/api/reports/expenses' + query);
@@ -721,7 +727,7 @@ window.loadExpensesReport = async function() {
 
 function renderExpensesTable(data) {
   const container = document.getElementById('expenseReportContainer');
-  
+
   if (!data.items.length) {
     container.innerHTML = `<div class="empty-state"><div class="empty-icon">🧾</div><p>No expenses found for this period.</p></div>`;
     return;
@@ -730,7 +736,7 @@ function renderExpensesTable(data) {
   container.innerHTML = `
     <div class="stat-grid" style="grid-template-columns: 1fr; margin-bottom: 24px;">
       <div class="stat-card yellow">
-        <div class="stat-value">$${fmt(data.total_amount)}</div>
+        <div class="stat-value">QAR ${fmt(data.total_amount)}</div>
         <div class="stat-label">${t('total_expenses')}</div>
       </div>
     </div>
@@ -741,7 +747,7 @@ function renderExpensesTable(data) {
           ${data.items.map(e => `
             <tr>
               <td data-label="${t('item')}" style="color:var(--text-primary);font-weight:500">${e.item}</td>
-              <td data-label="${t('amount')}" style="color:var(--red)">$${fmt(e.amount)}</td>
+              <td data-label="${t('amount')}" style="color:var(--red)">QAR ${fmt(e.amount)}</td>
               <td data-label="${t('date')}">${fmtDate(e.date_incurred)}</td>
               <td data-label="${t('notes')}">${e.notes || '—'}</td>
             </tr>
@@ -752,16 +758,16 @@ function renderExpensesTable(data) {
   `;
 }
 
-window.exportToPDF = function() {
+window.exportToPDF = function () {
   const element = document.getElementById('pageContent');
   const options = {
     margin: [10, 10, 10, 10],
     filename: `RentFlow_Report_${new Date().toISOString().split('T')[0]}.pdf`,
     image: { type: 'jpeg', quality: 0.98 },
-    html2canvas: { 
-      scale: 2, 
-      letterRendering: true, 
-      backgroundColor: document.documentElement.getAttribute('data-theme') === 'light' ? '#ffffff' : '#0f1117' 
+    html2canvas: {
+      scale: 2,
+      letterRendering: true,
+      backgroundColor: document.documentElement.getAttribute('data-theme') === 'light' ? '#ffffff' : '#0f1117'
     },
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
   };
@@ -804,12 +810,12 @@ async function renderDashboard(el, actions) {
       </div>
       <div class="stat-card yellow">
         <div class="stat-icon">💰</div>
-        <div class="stat-value">$${fmt(summary.total_revenue)}</div>
+        <div class="stat-value">QAR ${fmt(summary.total_revenue)}</div>
         <div class="stat-label">${t('dashboard_revenue')}</div>
       </div>
       <div class="stat-card red">
         <div class="stat-icon">⏳</div>
-        <div class="stat-value">$${fmt(summary.pending_balance)}</div>
+        <div class="stat-value">QAR ${fmt(summary.pending_balance)}</div>
         <div class="stat-label">${t('dashboard_pending')}</div>
       </div>
     </div>
@@ -828,9 +834,9 @@ async function renderDashboard(el, actions) {
             <tr>
               <td data-label="${t('tenant')}" style="color:var(--text-primary);font-weight:500">${l.tenant_name}</td>
               <td data-label="${t('asset')}">${l.asset_name || '—'}</td>
-              <td data-label="${t('contract')}">$${fmt(l.total_contract_amount)}</td>
-              <td data-label="${t('paid')}" style="color:var(--green)">$${fmt(l.paid_amount)}</td>
-              <td data-label="${t('remaining')}" style="color:var(--yellow)">$${fmt(l.remaining)}</td>
+              <td data-label="${t('contract')}">QAR ${fmt(l.total_contract_amount)}</td>
+              <td data-label="${t('paid')}" style="color:var(--green)">QAR ${fmt(l.paid_amount)}</td>
+              <td data-label="${t('remaining')}" style="color:var(--yellow)">QAR ${fmt(l.remaining)}</td>
               <td data-label="${t('end_date')}">${fmtDate(l.end_date)}</td>
             </tr>
           `).join('')}
@@ -955,7 +961,7 @@ async function renderAssets(el, actions) {
             <tr>
               <td data-label="${t('name')}" style="color:var(--text-primary);font-weight:500">${a.name}</td>
               <td data-label="${t('type')}">${a.type_name || '—'}</td>
-              <td data-label="${t('base_price')}">$${fmt(a.base_price)}</td>
+              <td data-label="${t('base_price')}">QAR ${fmt(a.base_price)}</td>
               <td data-label="${t('status')}"><span class="badge ${a.status === 'Available' ? 'badge-green' : a.status === 'Rented' ? 'badge-blue' : 'badge-red'}">${a.status}</span></td>
               <td data-label="${t('actions')}">
                 <div class="action-btns">
@@ -1065,25 +1071,25 @@ async function renderLeases(el, actions) {
         <thead><tr><th>${t('tenant')}</th><th>${t('asset')}</th><th>${t('period')}</th><th>${currentLang === 'ar' ? 'الإيجار الشهري' : 'Monthly Rent'}</th><th>${t('contract')}</th><th>${t('paid')}</th><th>${t('remaining')}</th><th style="width:120px">${t('actions')}</th></tr></thead>
         <tbody>
           ${leases.map(l => {
-            const start = new Date(l.start_date);
-            const end = new Date(l.end_date);
-            let months = (end.getFullYear() - start.getFullYear()) * 12;
-            months -= start.getMonth();
-            months += end.getMonth();
-            const daysDiff = end.getDate() - start.getDate();
-            const exactMonths = months + (daysDiff / 30);
-            const finalMonths = Math.max(1, Math.round(exactMonths * 10) / 10);
-            const monthlyRent = Number(l.total_contract_amount) / finalMonths;
+    const start = new Date(l.start_date);
+    const end = new Date(l.end_date);
+    let months = (end.getFullYear() - start.getFullYear()) * 12;
+    months -= start.getMonth();
+    months += end.getMonth();
+    const daysDiff = end.getDate() - start.getDate();
+    const exactMonths = months + (daysDiff / 30);
+    const finalMonths = Math.max(1, Math.round(exactMonths * 10) / 10);
+    const monthlyRent = Number(l.total_contract_amount) / finalMonths;
 
-            return `
+    return `
             <tr>
               <td data-label="${t('tenant')}" style="color:var(--text-primary);font-weight:500">${l.tenant_name}</td>
               <td data-label="${t('asset')}">${l.asset_name || '—'}</td>
               <td data-label="${t('period')}">${fmtDate(l.start_date)} → ${fmtDate(l.end_date)}</td>
-              <td data-label="${currentLang === 'ar' ? 'الإيجار الشهري' : 'Monthly Rent'}">$${fmt(monthlyRent)}</td>
-              <td data-label="${t('contract')}">$${fmt(l.total_contract_amount)}</td>
-              <td data-label="${t('paid')}" style="color:var(--green)">$${fmt(l.paid_amount)}</td>
-              <td data-label="${t('remaining')}" style="color:${Number(l.remaining) > 0 ? 'var(--yellow)' : 'var(--green)'}">$${fmt(l.remaining)}</td>
+              <td data-label="${currentLang === 'ar' ? 'الإيجار الشهري' : 'Monthly Rent'}">QAR ${fmt(monthlyRent)}</td>
+              <td data-label="${t('contract')}">QAR ${fmt(l.total_contract_amount)}</td>
+              <td data-label="${t('paid')}" style="color:var(--green)">QAR ${fmt(l.paid_amount)}</td>
+              <td data-label="${t('remaining')}" style="color:${Number(l.remaining) > 0 ? 'var(--yellow)' : 'var(--green)'}">QAR ${fmt(l.remaining)}</td>
               <td data-label="${t('actions')}">
                 <div class="action-btns">
                   <button class="btn btn-secondary btn-sm" onclick='showLeaseEditModal(${JSON.stringify(l)})'>${t('edit')}</button>
@@ -1092,7 +1098,7 @@ async function renderLeases(el, actions) {
               </td>
             </tr>
             `;
-          }).join('')}
+  }).join('')}
         </tbody>
       </table>
     </div>
@@ -1220,18 +1226,18 @@ function bindLeaseCalculations() {
       totalEl.value = '0.00';
       return;
     }
-    
+
     let months = (end.getFullYear() - start.getFullYear()) * 12;
     months -= start.getMonth();
     months += end.getMonth();
-    
+
     // Calculate partial month difference based on days
     const daysDiff = end.getDate() - start.getDate();
     // Assuming approx 30 days a month for simple proration if exactly month-to-month isn't aligned
     const exactMonths = months + (daysDiff / 30);
     // If it's a flat whole month selection (e.g. Jan 1 to Jan 31), ensure it counts as 1.
     const finalMonths = Math.max(1, Math.round(exactMonths * 10) / 10);
-    
+
     const total = finalMonths * parseFloat(monthlyEl.value || 0);
     totalEl.value = total.toFixed(2);
   }
@@ -1324,7 +1330,7 @@ async function renderPayments(el, actions) {
           ${payments.map(p => `
             <tr>
               <td data-label="${t('tenant')}" style="color:var(--text-primary);font-weight:500">${p.tenant_name || '—'}</td>
-              <td data-label="${t('amount')}" style="color:var(--green)">$${fmt(p.amount_paid)}</td>
+              <td data-label="${t('amount')}" style="color:var(--green)">QAR ${fmt(p.amount_paid)}</td>
               <td data-label="${t('method')}"><span class="badge badge-blue">${p.payment_method}</span></td>
               <td data-label="${t('date')}">${fmtDate(p.date_collected)}</td>
               <td data-label="${t('actions')}">
@@ -1351,7 +1357,7 @@ function showPaymentModal() {
           <div class="form-group">
             <label>Lease</label>
             <select class="form-control" id="payLease">
-              ${leasesCache.map(l => `<option value="${l.id}">${l.tenant_name} — $${fmt(l.remaining)} remaining</option>`).join('')}
+              ${leasesCache.map(l => `<option value="${l.id}">${l.tenant_name} — QAR ${fmt(l.remaining)} remaining</option>`).join('')}
             </select>
           </div>
           <div class="form-group">
@@ -1430,7 +1436,7 @@ async function renderExpenses(el, actions) {
           ${expenses.map(e => `
             <tr>
               <td data-label="${t('item')}" style="color:var(--text-primary);font-weight:500">${e.item}</td>
-              <td data-label="${t('amount')}" style="color:var(--yellow)">$${fmt(e.amount)}</td>
+              <td data-label="${t('amount')}" style="color:var(--yellow)">QAR ${fmt(e.amount)}</td>
               <td data-label="${t('date')}">${fmtDate(e.date_incurred)}</td>
               <td data-label="${t('notes')}">${e.notes || '—'}</td>
               <td data-label="${t('actions')}">
@@ -1528,7 +1534,7 @@ function updateThemeUI() {
   const theme = document.documentElement.getAttribute('data-theme');
   const icon = document.getElementById('themeIcon');
   const label = document.querySelector('#themeToggle span.label');
-  
+
   if (icon) icon.textContent = theme === 'dark' ? '🌙' : '☀️';
   if (label) {
     label.setAttribute('data-i18n', theme === 'dark' ? 'theme_dark' : 'theme_light');
