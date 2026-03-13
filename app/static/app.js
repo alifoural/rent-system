@@ -111,6 +111,10 @@ const translations = {
     tab_expenses: 'Expenses Report',
     total_expenses: 'Total Expenses',
     export_pdf: 'Export PDF',
+    export_excel: 'Export Excel',
+    asset_type: 'Type',
+    payment_date: 'Payment Date',
+    tab_monthly_status: 'Monthly Status',
     theme_light: 'Light Mode',
     theme_dark: 'Night Mode',
     theme_toggle: 'Night Mode'
@@ -191,6 +195,10 @@ const translations = {
     tab_expenses: 'تقرير المصروفات',
     total_expenses: 'إجمالي المصروفات',
     export_pdf: 'تصدير PDF',
+    export_excel: 'تصدير Excel',
+    asset_type: 'النوع',
+    payment_date: 'تاريخ الدفع',
+    tab_monthly_status: 'الحالة الشهرية',
     theme_light: 'الوضع النهاري',
     theme_dark: 'الوضع الليلي',
     theme_toggle: 'الوضع الليلي'
@@ -346,6 +354,7 @@ async function renderReports(el, actions) {
   actions.innerHTML = '';
   el.innerHTML = `
     <div class="tabs">
+      <button class="tab-btn ${currentReportTab === 'monthly_status' ? 'active' : ''}" onclick="switchReportTab('monthly_status')">${t('tab_monthly_status')}</button>
       <button class="tab-btn ${currentReportTab === 'monthly' ? 'active' : ''}" onclick="switchReportTab('monthly')">${t('tab_monthly')}</button>
       <button class="tab-btn ${currentReportTab === 'annual' ? 'active' : ''}" onclick="switchReportTab('annual')">${t('tab_annual')}</button>
       <button class="tab-btn ${currentReportTab === 'expenses' ? 'active' : ''}" onclick="switchReportTab('expenses')">${t('tab_expenses')}</button>
@@ -354,16 +363,138 @@ async function renderReports(el, actions) {
     <div id="reportTabContent"></div>
   `;
   const filterContainer = document.getElementById('reportFilters');
-  if (currentReportTab === 'monthly') await renderMonthlyTab(filterContainer);
+  if (currentReportTab === 'monthly_status') await renderMonthlyStatusTab(filterContainer);
+  else if (currentReportTab === 'monthly') await renderMonthlyTab(filterContainer);
   else if (currentReportTab === 'annual') await renderAnnualTab(filterContainer);
   else await renderExpensesTab(filterContainer);
 
-  actions.innerHTML = `<button class="btn btn-secondary" onclick="exportToPDF()"><span class="icon">📄</span> ${t('export_pdf')}</button>`;
+  actions.innerHTML = `
+    <button class="btn btn-secondary" style="margin-right:8px" onclick="exportToExcel()"><span class="icon">📊</span> ${t('export_excel')}</button>
+    <button class="btn btn-secondary" onclick="exportToPDF()"><span class="icon">📄</span> ${t('export_pdf')}</button>
+  `;
 }
 
 window.switchReportTab = function(tab) {
   currentReportTab = tab;
   navigate('reports');
+}
+
+// ── Monthly Status Report (matches Excel format) ─────────────────────────────
+let monthlyStatusData = [];
+
+async function renderMonthlyStatusTab(container) {
+  const today = new Date();
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  container.innerHTML = `
+    <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center; width:100%; margin-bottom:24px;">
+      <select id="statusMonth" class="form-control" style="width:140px; height:42px; padding:0 10px;">
+        ${monthNames.map((m, i) => `<option value="${i+1}" ${i+1 === today.getMonth()+1 ? 'selected' : ''}>${m}</option>`).join('')}
+      </select>
+      <input type="number" id="statusYear" class="form-control" style="width:100px; height:42px; padding:0 10px;" value="${today.getFullYear()}">
+      <button class="btn btn-primary" onclick="loadMonthlyStatusReport()" style="height:42px;">${t('generate')}</button>
+    </div>
+  `;
+  document.getElementById('reportTabContent').innerHTML = `<div id="monthlyStatusContainer"><div class="empty-state"><p>${t('loading')}</p></div></div>`;
+  setTimeout(loadMonthlyStatusReport, 50);
+}
+
+window.loadMonthlyStatusReport = async function() {
+  const container = document.getElementById('monthlyStatusContainer');
+  const month = document.getElementById('statusMonth').value;
+  const year = document.getElementById('statusYear').value;
+  if (!month || !year) return;
+  container.innerHTML = `<div class="empty-state"><p>${t('loading')}</p></div>`;
+  try {
+    monthlyStatusData = await api(`/api/reports/monthly?year=${year}&month=${month}`);
+    renderMonthlyStatusTable(month, year);
+  } catch(err) { toast(err.message, 'error'); }
+}
+
+window.renderMonthlyStatusTable = function(month, year) {
+  const container = document.getElementById('monthlyStatusContainer');
+  if (!monthlyStatusData.length) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon">📄</div><p>No data found.</p></div>`;
+    return;
+  }
+  const statusBadge = s => {
+    if (s === 'Paid') return `<span class="badge badge-green">${t('paid_status')}</span>`;
+    if (s === 'Partially Paid') return `<span class="badge badge-yellow">${t('partial_status')}</span>`;
+    if (s === 'Vacant') return `<span class="badge badge-grey" style="background:rgba(255,255,255,0.08);color:var(--text-muted)">${t('vacant_status')}</span>`;
+    return `<span class="badge badge-red">${t('unpaid_status')}</span>`;
+  };
+  const rows = monthlyStatusData.map((item, i) => `
+    <tr>
+      <td style="color:var(--text-muted);text-align:center">${i+1}</td>
+      <td data-label="${t('asset_type')}">${item.asset_type_name || '—'}</td>
+      <td data-label="${t('asset_name')}" style="color:var(--text-primary);font-weight:500">${item.asset_name}</td>
+      <td data-label="${t('tenant_name')}">${item.tenant_name}</td>
+      <td data-label="${t('expected_rent')}">$${fmt(item.expected_rent)}</td>
+      <td data-label="${t('paid_amount')}" style="color:var(--green)">$${fmt(item.amount_paid)}</td>
+      <td data-label="${t('balance')}" style="color:${Number(item.balance)>0?'var(--yellow)':'var(--text-muted)'}">$${fmt(item.balance)}</td>
+      <td data-label="${t('payment_date')}">${fmtDate(item.last_payment_date)}</td>
+      <td data-label="${t('status')}">${statusBadge(item.status)}</td>
+    </tr>
+  `).join('');
+
+  const totalPaid = monthlyStatusData.reduce((s, r) => s + Number(r.amount_paid), 0);
+  const totalBalance = monthlyStatusData.reduce((s, r) => s + Number(r.balance), 0);
+  const totalExpected = monthlyStatusData.reduce((s, r) => s + Number(r.expected_rent), 0);
+
+  container.innerHTML = `
+    <div class="stat-grid" style="grid-template-columns:repeat(3,1fr); margin-bottom:20px;">
+      <div class="stat-card blue"><div class="stat-value">$${fmt(totalExpected)}</div><div class="stat-label">${t('expected_rent')}</div></div>
+      <div class="stat-card green"><div class="stat-value">$${fmt(totalPaid)}</div><div class="stat-label">${t('paid_amount')}</div></div>
+      <div class="stat-card red"><div class="stat-value">$${fmt(totalBalance)}</div><div class="stat-label">${t('balance')}</div></div>
+    </div>
+    <div class="table-card" id="monthlyStatusTable">
+      <div class="table-header"><h3>📋 ${t('tab_monthly_status')} — ${new Date(year, month-1).toLocaleDateString('en-US',{month:'long',year:'numeric'})}</h3></div>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>${t('asset_type')}</th>
+            <th>${t('asset_name')}</th>
+            <th>${t('tenant_name')}</th>
+            <th>${t('expected_rent')}</th>
+            <th>${t('paid_amount')}</th>
+            <th>${t('balance')}</th>
+            <th>${t('payment_date')}</th>
+            <th>${t('status')}</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+// ── Excel Export (SheetJS) ───────────────────────────────────────────────────
+window.exportToExcel = function() {
+  if (currentReportTab === 'monthly_status' && monthlyStatusData.length > 0) {
+    const rows = monthlyStatusData.map((item, i) => ({
+      '#': i + 1,
+      [t('asset_type')]: item.asset_type_name || '—',
+      [t('asset_name')]: item.asset_name,
+      [t('tenant_name')]: item.tenant_name,
+      [t('expected_rent')]: Number(item.expected_rent),
+      [t('paid_amount')]: Number(item.amount_paid),
+      [t('balance')]: Number(item.balance),
+      [t('payment_date')]: item.last_payment_date || '—',
+      [t('status')]: item.status,
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Monthly Status');
+    XLSX.writeFile(wb, `monthly-status-report.xlsx`);
+  } else {
+    // Fallback: export any visible table
+    const table = document.querySelector('#reportTabContent table');
+    if (!table) return toast('No table to export', 'error');
+    const ws = XLSX.utils.table_to_sheet(table);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Report');
+    XLSX.writeFile(wb, `report.xlsx`);
+  }
 }
 
 async function renderMonthlyTab(container) {

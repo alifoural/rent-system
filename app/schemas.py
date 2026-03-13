@@ -148,11 +148,14 @@ class AssetReport(BaseModel):
 
 class MonthlyReportItem(BaseModel):
     asset_name: str
+    asset_type_name: Optional[str] = None
     tenant_name: str
     expected_rent: Decimal
     amount_paid: Decimal
     balance: Decimal
     status: str
+    last_payment_date: Optional[date] = None
+
 
 class AnnualReportLeaseDetails(BaseModel):
     tenant_name: str

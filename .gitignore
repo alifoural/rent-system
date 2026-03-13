@@ -10,8 +10,7 @@ env/
 .env
 
 # Database
-data/*.db
-data/*.sqlite
+
 
 # Logs
 *.log

@@ -91,7 +91,7 @@ async def monthly_report(
     month: int = Query(..., ge=1, le=12, description="Month of the report"),
     db: AsyncSession = Depends(get_db)
 ):
-    # Fetch all assets and their related leases and payments
+    # Fetch all assets and their related leases/payments (asset_type loaded via selectin)
     result = await db.execute(
         select(Asset).where(Asset.is_deleted == False).options(
             selectinload(Asset.leases).selectinload(Lease.payments)
@@ -105,6 +105,8 @@ async def monthly_report(
 
     reports = []
     for asset in assets:
+        asset_type_name = asset.asset_type.name if asset.asset_type else None
+
         # Check if there is an active lease for this month
         active_lease = None
         for lease in asset.leases:
@@ -115,10 +117,14 @@ async def monthly_report(
         expected_rent = asset.base_price
 
         if active_lease:
-            # Sum up all payments made during this specific month and year
-            paid_this_month = sum(
-                p.amount_paid for p in active_lease.payments 
+            # Payments made in this specific month
+            payments_this_month = [
+                p for p in active_lease.payments
                 if p.date_collected.year == year and p.date_collected.month == month
+            ]
+            paid_this_month = sum(p.amount_paid for p in payments_this_month)
+            last_payment_date = max(
+                (p.date_collected for p in payments_this_month), default=None
             )
             
             balance_this_month = max(Decimal("0"), expected_rent - paid_this_month)
@@ -133,11 +139,13 @@ async def monthly_report(
             reports.append(
                 MonthlyReportItem(
                     asset_name=asset.name,
+                    asset_type_name=asset_type_name,
                     tenant_name=active_lease.tenant_name,
                     expected_rent=expected_rent,
                     amount_paid=paid_this_month,
                     balance=balance_this_month,
-                    status=status
+                    status=status,
+                    last_payment_date=last_payment_date,
                 )
             )
         else:
@@ -145,11 +153,13 @@ async def monthly_report(
             reports.append(
                 MonthlyReportItem(
                     asset_name=asset.name,
+                    asset_type_name=asset_type_name,
                     tenant_name="—",
                     expected_rent=Decimal("0"),
                     amount_paid=Decimal("0"),
                     balance=Decimal("0"),
-                    status="Vacant"
+                    status="Vacant",
+                    last_payment_date=None,
                 )
             )
             
