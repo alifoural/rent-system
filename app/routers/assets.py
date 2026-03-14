@@ -32,7 +32,8 @@ async def list_assets(
     type_id: Optional[str] = Query(None, description="Filter by asset type ID"),
     db: AsyncSession = Depends(get_db)
 ):
-    stmt = select(Asset).join(Asset.asset_type, isouter=True).order_by(AssetType.name, Asset.name)
+    stmt = select(Asset).join(Asset.asset_type, isouter=True).order_by(Asset.created_at)
+
     if not include_deleted:
         stmt = stmt.where(Asset.is_deleted == False)  # noqa: E712
     if type_id:
