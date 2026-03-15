@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional
-from sqlalchemy import select
+from sqlalchemy import select, func, cast, Integer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -32,12 +32,20 @@ async def list_assets(
     type_id: Optional[str] = Query(None, description="Filter by asset type ID"),
     db: AsyncSession = Depends(get_db)
 ):
-    stmt = select(Asset).join(Asset.asset_type, isouter=True).order_by(Asset.created_at)
+    stmt = (
+        select(Asset)
+        .join(Asset.asset_type, isouter=True)
+        .order_by(
+            cast(func.regexp_replace(Asset.name, r'\D', ''), Integer)
+        )
+    )
 
     if not include_deleted:
-        stmt = stmt.where(Asset.is_deleted == False)  # noqa: E712
+        stmt = stmt.where(Asset.is_deleted == False)
+
     if type_id:
         stmt = stmt.where(Asset.type_id == type_id)
+
     result = await db.execute(stmt)
     return [_to_out(a) for a in result.scalars().all()]
 
@@ -61,9 +69,11 @@ async def create_asset(data: AssetCreate, db: AsyncSession = Depends(get_db)):
         status=data.status,
         metadata_=data.metadata_,
     )
+
     db.add(obj)
     await db.flush()
     await db.refresh(obj)
+
     return _to_out(obj)
 
 
@@ -73,15 +83,19 @@ async def update_asset(
 ):
     result = await db.execute(select(Asset).where(Asset.id == asset_id))
     obj = result.scalar_one_or_none()
+
     if not obj:
         raise HTTPException(404, "Asset not found")
+
     for field, value in data.model_dump(exclude_unset=True).items():
         if field == "metadata_":
             setattr(obj, "metadata_", value)
         else:
             setattr(obj, field, value)
+
     await db.flush()
     await db.refresh(obj)
+
     return _to_out(obj)
 
 
@@ -90,7 +104,11 @@ async def delete_asset(asset_id: str, db: AsyncSession = Depends(get_db)):
     """Soft-delete: preserves financial history for reports."""
     result = await db.execute(select(Asset).where(Asset.id == asset_id))
     obj = result.scalar_one_or_none()
+
     if not obj:
         raise HTTPException(404, "Asset not found")
+
     obj.is_deleted = True
     obj.status = "Deleted"
+
+    await db.flush()
